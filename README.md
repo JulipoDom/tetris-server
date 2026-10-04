@@ -1,60 +1,64 @@
-# Tetris Versus server
+# Servidor Tetris Versus
 
-A Python 3.12+ server boilerplate for a terminal Tetris game with two players.
-The local match logic, simulations, and tests work. Real TCP networking is
-reserved for manual implementation with `TODO[EP-REDE]` stubs.
+Estrutura inicial de um servidor Python 3.12+ para um jogo de Tetris no terminal
+com dois jogadores. A lógica local da partida, as simulações e os testes estão
+implementados. A comunicação TCP fica para implementação manual nos pontos
+marcados com `TODO[EP-REDE]`.
 
-## General idea
+## Ideia geral
 
-Each client runs its own Tetris board: pieces, gravity, collisions, line clears,
-score, garbage application, and local defeat detection. Multiple line clears
-produce garbage attacks for the opponent. The server identifies the two players,
-waits for both to be ready, forwards attacks and fixed-board snapshots, and
-records one final result. It trusts cooperative clients and does not simulate
-physics or prove that an attack came from a real line clear.
+Cada cliente executa seu próprio tabuleiro: peças, gravidade, colisões, remoção
+de linhas, pontuação, aplicação de lixo e detecção de derrota local. A remoção
+de várias linhas produz ataques de lixo para o adversário. O servidor identifica
+os dois jogadores, espera ambos ficarem prontos, encaminha ataques e cópias dos
+blocos fixos do tabuleiro e registra um resultado único. Ele confia em clientes
+cooperativos: não simula a física nem comprova que um ataque veio de uma jogada.
 
-The intended network server handles **exactly two players and one match per
-execution**, then exits. Another match requires restarting. Rooms, matchmaking,
-accounts, rankings, reconnection, and databases are outside the scope. The client
-engine and terminal UI are not included in this repository.
+O servidor de rede previsto atende **exatamente dois jogadores e uma partida por
+execução**, encerrando depois do resultado. Outra partida exige reiniciar os
+processos. Salas, matchmaking, contas, ranking, reconexão e banco de dados ficam
+fora do escopo. O motor do cliente e a interface de terminal não fazem parte
+deste repositório.
 
-## Run locally
+## Executar localmente
 
-Use Python 3.12 or newer, with the same minor version across the team. The domain
-and tests use only the standard library. From the repository root:
+Use Python 3.12 ou superior, com a mesma versão menor entre os integrantes da
+equipe. O domínio e os testes usam apenas a biblioteca padrão. Na raiz do
+repositório, execute:
 
 ```bash
 PYTHONPATH=src python -m tetris_server --mode simulated
 ```
 
-This runs eight scripted scenarios, prints their local logs, and exits. Omitting
-`--mode` also selects `simulated`. It does not wait for real clients or open a port.
-`PYTHONPATH=src` makes the uninstalled packages in `src/` available to Python.
+O comando executa oito cenários predefinidos, imprime os registros locais e
+termina. Sem `--mode`, o modo padrão também é `simulated`. Ele não espera clientes
+reais nem abre uma porta. `PYTHONPATH=src` permite ao Python encontrar os pacotes
+em `src/` sem instalar o projeto.
 
-Run the tests:
+Para executar os testes:
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-The current suite contains **30 tests**, covering lifecycle, validation,
-forwarding order, immutable snapshots/results, cancellation, delivery failures,
-simulations, and the explicit network stubs.
+A suíte atual contém **30 testes**, cobrindo o ciclo da partida, validação,
+ordem de encaminhamento, cópias e resultados imutáveis, cancelamento, falhas
+de entrega, simulações e os pontos de rede ainda pendentes.
 
-Network mode is currently pending:
+O modo de rede ainda não está implementado:
 
 ```bash
 PYTHONPATH=src python -m tetris_server --mode network
 ```
 
-It prints `TODO[EP-REDE]: TCP listener, sessions, I/O, buffers, and timers` to
-stderr and exits with status **2**. There is no silent fallback to simulation.
+Ele imprime `TODO[EP-REDE]: TCP listener, sessions, I/O, buffers, and timers` na
+saída de erro e termina com código **2**. Não muda silenciosamente para a simulação.
 
-### Optional installation
+### Instalação opcional
 
-An editable install enables module commands without `PYTHONPATH` and the
-`tetris_server` console command. Installation uses setuptools as a build tool;
-there are no third-party runtime dependencies.
+A instalação editável permite usar os comandos de módulo sem `PYTHONPATH` e o
+executável `tetris_server`. A instalação usa setuptools como ferramenta de
+empacotamento; não há dependências externas durante a execução do servidor.
 
 ```bash
 python -m venv .venv
@@ -64,147 +68,159 @@ python -m venv .venv
 .venv/bin/tetris_server --mode simulated
 ```
 
-## How execution works
+## Como a execução funciona
 
-`__main__.py` selects the mode. Simulated mode calls `run_simulations()`; network
-mode calls the pending `NetworkServer.run()`.
+`__main__.py` seleciona o modo. O modo simulado chama `run_simulations()`; o modo
+de rede chama `NetworkServer.run()`, que ainda contém uma implementação pendente.
 
-The implemented local processing path is:
+O processamento local implementado segue este caminho:
 
 ```text
 Command → ServerApp.process() → MatchController
-        → OutboundEvent → per-session outbox
-                        → optional local delivery callback
+        → OutboundEvent → caixa de saída por sessão
+                        → função opcional de entrega local
 ```
 
-`ServerApp.process()` dispatches one command completely before the next. The
-controller owns the two player slots and transitions:
+`ServerApp.process()` processa um comando por completo antes do próximo. O
+controlador mantém as duas posições de jogadores e as transições de estado:
 
 ```text
 WAITING → PREPARING → PLAYING → FINISHED
 ```
 
-The first join stays in WAITING. The second join emits MATCH with the opponent's
-nickname and enters PREPARING. Both players becoming ready emits one READY/GO
-per player and enters PLAYING. An ending event records the result before queuing
-GAMEOVER. Identified-player failure or planned stop can also end before play.
+A primeira identificação mantém WAITING (aguardando). A segunda gera MATCH com o
+apelido do adversário e entra em PREPARING (preparação). Quando ambos ficam
+prontos, o controlador gera um READY/GO por jogador e entra em PLAYING (jogando).
+Um evento de encerramento registra o resultado antes de enfileirar GAMEOVER.
+Uma falha de participante identificado ou uma parada planejada também pode
+encerrar a execução antes de começar o jogo.
 
-Sessions are stable, hashable identity tokens; equal nicknames are allowed.
-The opponent always comes from the other slot, not a client-supplied target.
-Known participants' late game events do not create new effects after FINISHED.
+As sessões são identificadores estáveis que podem ser usados como chaves de
+um dicionário; apelidos iguais são permitidos. O adversário é sempre o jogador
+da outra posição, não um alvo informado pelo cliente. Após FINISHED (encerrado),
+eventos de jogo tardios de participantes conhecidos não produzem novos efeitos.
 
-## What is implemented
+## O que está implementado
 
-| Feature | How it works | Location |
+| Funcionalidade | Como funciona | Localização |
 | --- | --- | --- |
-| Shared typed objects | Enums plus frozen player, command, event, and result dataclasses. | [models.py](src/tetris_shared/models.py) |
-| Two-player admission | Validates nicknames, rejects duplicate sessions and a third participant without replacing the original pair. | `MatchController.join()` in [match.py](src/tetris_server/match.py) |
-| Readiness | Repetition is idempotent; both ready players receive exactly one GO before game effects. | `MatchController.ready()` |
-| Attack forwarding | Validates integer garbage quantity 1, 2, or 4, rejects booleans, and forwards unchanged. | `MatchController.attack()` |
-| Board forwarding | Validates 20×10 integer cells from 0–8, stores an immutable copy, and forwards to the opponent. | `MatchController.board()` |
-| Final result | First valid ending wins processing order; later KO or delivery failure cannot revise the result. | `ko()`, `_finish()`, and `MatchResult` |
-| Failure policy | Before play, identified failure cancels; during play, the opponent wins. Planned stop always cancels an unfinished match. | `failure()` and `stop()` |
-| Output queues and logs | Queue Python events per recipient; only stale unconsumed BOARD events can be replaced. Attacks and results are preserved. | [app.py](src/tetris_server/app.py) |
-| Local callback delivery | Callback exceptions become disconnect facts; newly queued survivor notifications are also drained. | `ServerApp.deliver()` |
-| Local scenarios and tests | Exercise the domain without sockets, byte serialization, UI, or real timers. | [simulation.py](src/tetris_server/simulation.py), [tests](tests) |
+| Objetos tipados compartilhados | Enumerações e dataclasses imutáveis para jogador, comando, evento e resultado. | [models.py](src/tetris_shared/models.py) |
+| Admissão de dois jogadores | Valida apelidos e recusa sessões duplicadas e um terceiro participante, preservando a dupla original. | `MatchController.join()` em [match.py](src/tetris_server/match.py) |
+| Prontidão | Repetições não duplicam efeitos; ambos recebem exatamente um GO antes dos efeitos de jogo. | `MatchController.ready()` |
+| Encaminhamento de ataques | Valida a quantidade inteira de lixo 1, 2 ou 4, rejeita booleanos e encaminha o valor sem alteração. | `MatchController.attack()` |
+| Encaminhamento de tabuleiro | Valida 20×10 células inteiras de 0 a 8, guarda uma cópia imutável e encaminha ao adversário. | `MatchController.board()` |
+| Resultado único | O primeiro encerramento válido processado determina o resultado; KO tardio e falha de entrega não o alteram. | `ko()`, `_finish()` e `MatchResult` |
+| Política de falhas | Antes do jogo, falha de participante identificado cancela; durante o jogo, o adversário vence. Parada planejada cancela uma partida ainda não encerrada. | `failure()` e `stop()` |
+| Caixas de saída e registros | Enfileiram eventos Python por destinatário; apenas BOARD antigos ainda não consumidos podem ser substituídos. Ataques e resultados são preservados. | [app.py](src/tetris_server/app.py) |
+| Entrega local por função | Exceções na função de entrega tornam-se fatos de desconexão; novas notificações ao participante remanescente também são processadas. | `ServerApp.deliver()` |
+| Cenários locais e testes | Exercitam o domínio sem sockets, serialização de bytes, interface gráfica ou temporizadores reais. | [simulation.py](src/tetris_server/simulation.py), [testes](tests) |
 
-Every function in `src/` has a short explanatory docstring. Common board rules,
-validation values, and reserved network defaults live in
-[rules.py](src/tetris_shared/rules.py). `.gitignore` excludes Python outputs,
-virtual environments, caches, environment files, and local agent/credential
-folders.
+Cada função em `src/` possui uma docstring curta explicando sua finalidade.
+As regras comuns do tabuleiro, os valores de validação e os padrões reservados
+para rede estão em [rules.py](src/tetris_shared/rules.py). O `.gitignore` exclui
+arquivos gerados pelo Python, ambientes virtuais, caches, arquivos de variáveis
+de ambiente e pastas locais de agentes e credenciais.
 
-## How the simulation works
+## Como a simulação funciona
 
-Every scenario creates a fresh `ServerApp` and `MatchController`. Strings such
-as `player1` and `player2` stand in for sessions. Scripted `Command` objects pass
-through the real dispatcher; resulting `OutboundEvent` objects remain in local
-outboxes or are consumed by a callback. No real Tetris client is running.
+Cada cenário cria um novo `ServerApp` e um novo `MatchController`. Strings como
+`player1` e `player2` representam as sessões. Objetos `Command` predefinidos passam
+pelo processador real; os objetos `OutboundEvent` resultantes ficam nas caixas
+de saída locais ou são consumidos por uma função de entrega. Nenhum cliente
+real de Tetris está em execução.
 
-The normal scenario performs two joins, two readiness commands, an attack of
-2 garbage lines, a board snapshot, then player1 KO/SPAWN. The final result is
-player2 WIN/KO and player1 LOSE/KO. The server only forwards the attack; it does
-not apply garbage to a simulated game board.
+O cenário normal realiza duas identificações, duas confirmações de prontidão,
+um ataque de 2 linhas de lixo, uma cópia do tabuleiro e um KO/SPAWN de player1.
+O resultado final é player2 WIN/KO e player1 LOSE/KO. O servidor apenas encaminha
+o ataque; não aplica lixo a um tabuleiro de jogo simulado.
 
-| Scenario | Behavior exercised |
+| Cenário | Comportamento exercitado |
 | --- | --- |
-| `complete_match` | Identification, readiness, attack, snapshot, and KO. |
-| `third_participant_refused` | Rejecting a third participant while preserving the original pair. |
-| `first_ko_player1` | Duplicate readiness and player1's KO taking effect first. |
-| `first_ko_player2` | The reverse KO order; the first processed result stays fixed. |
-| `departure_before_play` | Disconnect during preparation produces cancellation. |
-| `departure_during_play` | Disconnect during play gives the opponent a win. |
-| `invalid_inputs` | Invalid board, boolean attack, and unknown session are rejected; planned stop cancels. |
-| `delivery_failure` | An injected callback failure after finalization preserves the recorded result. |
+| `complete_match` | Identificação, prontidão, ataque, cópia do tabuleiro e KO. |
+| `third_participant_refused` | Recusa de um terceiro participante, preservando a dupla original. |
+| `first_ko_player1` | Prontidão repetida e KO de player1 processado primeiro. |
+| `first_ko_player2` | Ordem inversa dos KOs; o primeiro resultado processado permanece fixo. |
+| `departure_before_play` | Desconexão durante a preparação produz cancelamento. |
+| `departure_during_play` | Desconexão durante o jogo dá vitória ao adversário. |
+| `invalid_inputs` | Tabuleiro inválido, ataque booleano e sessão desconhecida são rejeitados; parada planejada cancela. |
+| `delivery_failure` | Falha injetada na função de entrega após o encerramento preserva o resultado registrado. |
 
-Running eight independent fixtures demonstrates behavior; it is not a production
-server that hosts multiple matches. Most scenarios inspect queued effects without
-calling delivery for every event. The final scenario explicitly uses callbacks.
+As oito execuções independentes demonstram o comportamento da lógica local;
+não representam um servidor de produção que hospeda várias partidas. A maioria
+dos cenários inspeciona efeitos enfileirados sem chamar a entrega para cada
+evento. O último cenário usa explicitamente funções de entrega.
 
-A heading such as `Scenario: complete_match state=FINISHED` shows the final state.
-Following records show the state at each command or queued output, the participant,
-occurrence, and optional reason. For a command, participant is the sender; for an
-output, it is the intended recipient. An output log means **queued in memory**,
-not delivered over TCP. `reason=-` means the log record has no reason field;
-GAMEOVER's outcome/reason are stored in its payload and the final match result.
+Um cabeçalho como `Scenario: complete_match state=FINISHED` mostra o estado final.
+Os registros seguintes mostram o estado em cada comando ou saída enfileirada,
+o participante, a ocorrência e o motivo opcional. Em comandos, o participante
+é o remetente; em saídas, é o destinatário. Um registro de saída significa
+**enfileirado em memória**, não entregue por TCP. `reason=-` indica ausência de
+motivo naquele registro; o resultado e o motivo de GAMEOVER ficam em seu objeto
+de dados e no resultado final da partida.
 
-See [IMPLEMENTS.md](IMPLEMENTS.md) for a step-by-step trace and a runnable example
-that prints an outbox and the result directly.
+Consulte [IMPLEMENTS.md](IMPLEMENTS.md) para acompanhar o fluxo passo a passo e
+executar um exemplo que imprime diretamente uma caixa de saída e o resultado.
 
-## Where manual implementation is needed
+## Onde é necessária implementação manual
 
-Four executable entry points currently raise `NotImplementedError`:
+Quatro pontos executáveis atualmente levantam `NotImplementedError`:
 
-| Entry point | Work to implement |
+| Ponto de entrada | Trabalho a implementar |
 | --- | --- |
-| `NetworkServer.run()` in [network.py](src/tetris_server/network.py) | TCP listener, sequential nonblocking event loop, two connection reservations, trusted session association, input/output buffers, partial writes, failure detection, timers, final drain, and socket closure. |
-| `encode(event)` in [protocol.py](src/tetris_shared/protocol.py) | Serialize outgoing events into ASCII TVP/1 lines ending in LF. Flatten BOARD into exactly 200 digits. |
-| `decode(frame)` in [protocol.py](src/tetris_shared/protocol.py) | Validate exact grammar/fields and translate accepted client input into local commands. The adapter must bind the actual sender session and handle message direction/state. |
-| `StreamParser.feed(data)` in [protocol.py](src/tetris_shared/protocol.py) | Keep a buffer per connection, extract all complete LF-delimited messages, retain fragments, and reject oversized input even before LF arrives. |
+| `NetworkServer.run()` em [network.py](src/tetris_server/network.py) | Listener TCP, laço sequencial de eventos com I/O não bloqueante, reserva de duas conexões, associação confiável de sessões, buffers de entrada e saída, escritas parciais, detecção de falhas, temporizadores, escoamento final e fechamento dos sockets. |
+| `encode(event)` em [protocol.py](src/tetris_shared/protocol.py) | Serializar eventos de saída em linhas ASCII TVP/1 terminadas por LF. Converter BOARD em exatamente 200 dígitos. |
+| `decode(frame)` em [protocol.py](src/tetris_shared/protocol.py) | Validar a gramática e os campos exatos e traduzir entradas aceitas do cliente em comandos locais. O adaptador deve associar a sessão real do remetente e validar direção e estado. |
+| `StreamParser.feed(data)` em [protocol.py](src/tetris_shared/protocol.py) | Manter um buffer por conexão, extrair todas as mensagens completas delimitadas por LF, guardar fragmentos e rejeitar entradas grandes demais mesmo antes de chegar LF. |
 
-Implement the codec/framing first, then connection admission, dispatch integration,
-output buffers, timers, shutdown, and real TCP integration tests. The detailed
-manual checklist is in [IMPLEMENTS.md](IMPLEMENTS.md).
+Implemente primeiro a codificação, decodificação e delimitação das mensagens.
+Depois, avance para admissão de conexões, integração com o processador de comandos,
+buffers de saída, temporizadores, encerramento e testes de integração TCP reais.
+A lista detalhada de tarefas manuais está em [IMPLEMENTS.md](IMPLEMENTS.md).
 
-### Protocol and adapter requirements
+### Requisitos do protocolo e do adaptador
 
-Exactly eight wire types are reserved: `HELLO`, `MATCH`, `READY`, `BOARD`, `ATTACK`,
-`KO`, `GAMEOVER`, and `KEEPALIVE`. The planned format is ASCII `TVP/1|...` with LF
-termination. The existing enums/events are not a working codec.
+Estão reservados exatamente oito tipos de mensagem: `HELLO`, `MATCH`, `READY`,
+`BOARD`, `ATTACK`, `KO`, `GAMEOVER` e `KEEPALIVE`. O formato previsto é ASCII
+`TVP/1|...` terminado por LF. As enumerações e os eventos existentes ainda não
+implementam a codificação e decodificação do protocolo.
 
-The adapter maps HELLO to `join`, READY/PLAYER to `ready`, BOARD to `board`, ATTACK
-to `attack`, and KO to `ko`. KEEPALIVE belongs to adapter activity bookkeeping;
-it must not be echoed or dispatched as a new gameplay operation. Socket failure,
-timeout, and protocol violation become internal `failure` commands. The adapter
-must handle logged/re-raised domain errors according to the protocol policy.
+O adaptador traduz HELLO para `join`, READY/PLAYER para `ready`, BOARD para `board`,
+ATTACK para `attack` e KO para `ko`. KEEPALIVE serve ao controle de atividade do
+adaptador: não deve ser respondido imediatamente nem virar uma nova operação
+de jogo. Falha de socket, timeout e violação de protocolo tornam-se comandos
+internos `failure`. O adaptador deve tratar os erros de domínio registrados e
+relançados conforme a política do protocolo.
 
-| Pending rule | Default |
+| Regra pendente | Valor padrão |
 | --- | --- |
-| Admitted connections, including those awaiting HELLO | At most 2; immediately close a third. |
-| First valid HELLO deadline | 5 seconds after acceptance. |
-| KEEPALIVE schedule | Every 5 seconds after HELLO, even with other traffic. |
-| Inactivity timeout | 15 seconds since the last complete valid message. |
-| Maximum complete line | 512 bytes including LF; also bound incomplete fragments. |
-| Maximum pending output | 4096 bytes per connection. |
-| Final notification drain | At most 1 second, then close and exit. |
+| Conexões admitidas, incluindo as que aguardam HELLO | No máximo 2; fechar uma terceira imediatamente. |
+| Prazo para o primeiro HELLO válido | 5 segundos após aceitar a conexão. |
+| Envio periódico de KEEPALIVE | A cada 5 segundos após HELLO, mesmo com outro tráfego. |
+| Timeout de inatividade | 15 segundos desde a última mensagem completa e válida. |
+| Tamanho máximo de uma linha completa | 512 bytes incluindo LF; limitar também fragmentos incompletos. |
+| Limite de saída pendente | 4096 bytes por conexão. |
+| Escoamento das notificações finais | No máximo 1 segundo; depois fechar e encerrar. |
 
-These values are declared/documented but no network timers or byte buffers run
-yet. Unidentified failures free their reservation without canceling an identified
-player; identified players cannot be replaced. TCP reads/writes can be partial,
-so preserve remaining bytes. Only snapshots not yet serialized may be coalesced.
-The local callback `deliver()` does not implement socket writes or confirm wire
-delivery. Record the result once and never change it because a notification fails.
+Esses valores estão declarados e documentados, mas ainda não há temporizadores
+de rede ou buffers de bytes em execução. Falhas antes da identificação liberam
+a reserva sem cancelar a participação de quem já se identificou; participantes
+identificados não podem ser substituídos. Leituras e escritas TCP podem ser
+parciais, então preserve os bytes restantes. Apenas cópias do tabuleiro ainda
+não serializadas podem ser substituídas por versões mais recentes. A função de
+entrega local `deliver()` não implementa escritas em sockets nem confirma entrega
+pela rede. Registre o resultado uma vez e não o altere por falha de notificação.
 
-Real networking will require new tests for framing, byte validation, partial I/O,
-connection admission, deadlines, and end-to-end peers. Replace current tests that
-expect stub failures when those stubs are implemented; preserve domain regressions.
+A rede real exigirá novos testes de delimitação, validação de bytes, I/O parcial,
+admissão de conexões, prazos e comunicação entre participantes reais. Quando os
+pontos pendentes forem implementados, substitua os testes que esperam essas
+falhas explícitas e preserve os testes de regressão do domínio.
 
-## Project documents
+## Documentos do projeto
 
-| Document | Purpose |
+| Documento | Finalidade |
 | --- | --- |
-| [00-contexto-geral.md](00-contexto-geral.md) | Source of truth for rules, protocol grammar, directions, state restrictions, and failure policy. |
-| [02-boilerplate-servidor.md](02-boilerplate-servidor.md) | Server scope, structure, scenarios, and acceptance criteria. |
-| [IMPLEMENTS.md](IMPLEMENTS.md) | Feature-to-function map, manual implementation checklist, and simulation walkthrough. |
-| [AGENTS.md](AGENTS.md) | Repository guidance and constraints for future changes. |
-| [Implementation plan](docs/superpowers/plans/2026-10-04-server-boilerplate.md) | Completed boilerplate plan and execution/verification record. |
+| [00-contexto-geral.md](00-contexto-geral.md) | Fonte única das regras, gramática do protocolo, direções, restrições de estado e política de falhas. |
+| [02-boilerplate-servidor.md](02-boilerplate-servidor.md) | Escopo do servidor, estrutura, cenários e critérios de aceite. |
+| [IMPLEMENTS.md](IMPLEMENTS.md) | Mapa de funcionalidades e funções, tarefas de implementação manual e explicação da simulação. |
+| [AGENTS.md](AGENTS.md) | Orientações do repositório e restrições para alterações futuras. |
+| [Plano de implementação](docs/superpowers/plans/2026-10-04-server-boilerplate.md) | Plano concluído da estrutura inicial e registro de execução e verificação. |
