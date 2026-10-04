@@ -1,0 +1,380 @@
+{
+  "name": "superpowers",
+  "version": "6.4.2",
+  "repository": "https://github.com/obra/superpowers",
+  "author": "Jesse Vincent",
+  "license": "MIT",
+  "source": {
+    "kind": "installed-codex-plugin",
+    "catalog": "openai-curated-remote",
+    "upstream_commit": null
+  },
+  "copied_on": "2026-10-04",
+  "included_paths": [
+    "skills/",
+    "LICENSE"
+  ],
+  "modifications": "none to copied upstream files; README.md and provenance.json are project-authored",
+  "files": {
+    "skills/brainstorming/SKILL.md": {
+      "sha256": "a32d2255354775aa124855aa7100cf276bea096fff4ebb3a0edf57be216e6c72",
+      "executable": false
+    },
+    "skills/brainstorming/agents/openai.yaml": {
+      "sha256": "90585d2a09289aaff7eba1271596e8500c7328437b94839f2d39699a41689195",
+      "executable": false
+    },
+    "skills/brainstorming/scripts/frame-template.html": {
+      "sha256": "6a8a4e58bd6a44b904e2e3c57de774481d909204597e1498de53f1b2fecc4c4e",
+      "executable": false
+    },
+    "skills/brainstorming/scripts/helper.js": {
+      "sha256": "43c6d69954a46ec34a2a262bcc62a9a7e83e839c739f199cb72646d397c686e3",
+      "executable": false
+    },
+    "skills/brainstorming/scripts/server.cjs": {
+      "sha256": "2d2961ea8d11f56c5f4c3a1a68d22709efa5d7601a2246d8c880774e7e9e8412",
+      "executable": false
+    },
+    "skills/brainstorming/scripts/start-server.sh": {
+      "sha256": "a4e5ae84275bcaacd2f84345afeabe59cf7b00ba080e123da7cc1fb226f12847",
+      "executable": true
+    },
+    "skills/brainstorming/scripts/stop-server.sh": {
+      "sha256": "0b5ccbbd57f62d3ed88993f7940b5ee0e5c0fc9b21c550c623da4f6292e47daf",
+      "executable": true
+    },
+    "skills/brainstorming/spec-document-reviewer-prompt.md": {
+      "sha256": "95a0a195de9d984be2fffa95bab16fc8c563bc296a9cfc5e9c29cb3ece0d7457",
+      "executable": false
+    },
+    "skills/brainstorming/visual-companion.md": {
+      "sha256": "6ffcb038b53254bd31debaa15e12dcd4ff24bd63d690e0b644ac6396701cf2e2",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/SKILL.md": {
+      "sha256": "5a652f8132cc901eb5ca61f89157839f87a2f20aed037fc7a2b51051bc37cd19",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/agents/openai.yaml": {
+      "sha256": "870134aaf221d744d6f6a7c81d5175453bdd912362e03f1979fb77afd2820993",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/analyst-common.md": {
+      "sha256": "88801c36070be2a54a8a9a29632b01ab21db053e2e76ee49b5252a9b74ca4090",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/cost-and-time.md": {
+      "sha256": "fe97a66d4db3b436816ef82694bda413b522b3a862dd41978da01e358fffecc4",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/plan-adherence.md": {
+      "sha256": "1dcbab82033598a2e9c9ee42e950d4b1822d2c871c02cef9e102cdd5cbbda113",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/quality-evidence.md": {
+      "sha256": "749d11cf678f379ed77a29274cad456634e0284aa523639a1a214a9f2b986eb1",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/repeated-work.md": {
+      "sha256": "895027f2dfa4b1b8bcdb7ac9aec8d45a80bff212fad6ec6cad5ab38fa68322f5",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/request-conflicts.md": {
+      "sha256": "e800e38d8b7752c212c76c5c3ed75cd78b749684263ea0c313586f26af6f4b5c",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/scrub-audit.md": {
+      "sha256": "5cc48f05a7f81f5f7e05e0c7ceafc0fb8774bcaf75fe88dcb5c7e408026c70ad",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/scrub.md": {
+      "sha256": "854cb3320cc5377b493cea2f72519d67983464882db68a0f408a7d0a0f040b8c",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/similar-session.md": {
+      "sha256": "b190f713b463df2bb5ec3914647e204074d1bd50643a53159db6d13cace916c1",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/skill-timeline.md": {
+      "sha256": "45d604d583b57a77b9033eced8eb875ef342af70fcd66cf7d15c6dc89964890f",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/prompts/stumbles.md": {
+      "sha256": "1f2d1f048aff7b8b400006301f1ce8c232ecc7e9d5f705af27a849b2c03ea2e7",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/references/context-safety.md": {
+      "sha256": "e6be2bd3495f454d4bedee9484d728d245d1fa656e11fc4ceec5693c16e4730a",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/references/github-issues.md": {
+      "sha256": "a656f5e15b21c7a200c39c038f5ede74b9d6ea3ceeb90f39af7e930c8d8424d6",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/references/redaction-policy.md": {
+      "sha256": "96b16f47074838fe2d7e609577d6f8b0ad460f8378b281a3f96ee23cb5a08bde",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/references/session-discovery.md": {
+      "sha256": "6d1dced083e5d978448a78df298cf515531b0eb39b2854a4a2afbffeb69a7435",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/templates/bundle-README.md": {
+      "sha256": "2e6ddc6b106028d5ebd00a50ad93a77111d675c219ee1273cd0857869e8d51ec",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/templates/case.md": {
+      "sha256": "597892462be83bc478536ec91f7c285f6dd25d119c560734a3a180fe8471301d",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/templates/issue.md": {
+      "sha256": "8f28dbfe60602f77dda76d81815cb4e2dce7d3e2a93348890e1581be8310ac1f",
+      "executable": false
+    },
+    "skills/diagnosing-superpowers/templates/report.md": {
+      "sha256": "38295d0fd785e8608f330815c59ebd7047942002ec7085aecbed54681f56b0c1",
+      "executable": false
+    },
+    "skills/dispatching-parallel-agents/SKILL.md": {
+      "sha256": "1968923066f3b707eb01d1992cdf4c42284c3855f70253b9cd5000ff45fca13c",
+      "executable": false
+    },
+    "skills/dispatching-parallel-agents/agents/openai.yaml": {
+      "sha256": "55e5cdae31b34dcafb3cdeb7ca6e154ad3a1ab56da7e6b0d4cc8e1e098ecb5da",
+      "executable": false
+    },
+    "skills/executing-plans/SKILL.md": {
+      "sha256": "f38e8f2ddcf079f65493adc713c1fed78421dfaf5f4dbf6b3a6b2b1d95466e71",
+      "executable": false
+    },
+    "skills/executing-plans/agents/openai.yaml": {
+      "sha256": "c9884a11c9c4721b838ad0b526590efdf677065fb20af0ac3b2bd2ea55cf8786",
+      "executable": false
+    },
+    "skills/executing-plans/scripts/task-done": {
+      "sha256": "f704dc216e0602f95c601b9ee1113c9a55cc1c5f6e4d149dddfba0fd3ad1c314",
+      "executable": true
+    },
+    "skills/executing-plans/scripts/task-start": {
+      "sha256": "f833693c8fce3700fc9f841562d80f8015cd40f652c168a3405ac3e46947a1fe",
+      "executable": true
+    },
+    "skills/finishing-a-development-branch/SKILL.md": {
+      "sha256": "8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65",
+      "executable": false
+    },
+    "skills/finishing-a-development-branch/agents/openai.yaml": {
+      "sha256": "74ab618a66f23e8e29015f4ab14db2dd0f639e98c6fdc25fb912fb6a82ed593d",
+      "executable": false
+    },
+    "skills/receiving-code-review/SKILL.md": {
+      "sha256": "091df1629510af1b92fc4abd6f96732ebedb4cb2c0f3457e8f2740b0504a2438",
+      "executable": false
+    },
+    "skills/receiving-code-review/agents/openai.yaml": {
+      "sha256": "f5515fdf668d22fffc4fd367f990318b2c1ba1a73d9b3ba5661c40e02deedfbc",
+      "executable": false
+    },
+    "skills/requesting-code-review/SKILL.md": {
+      "sha256": "cfcee1b06774e7c0517f1e09be1a11f2d5680257072723e709ddbcf7e08b795a",
+      "executable": false
+    },
+    "skills/requesting-code-review/agents/openai.yaml": {
+      "sha256": "1917e3cf2c957e7512343e622b002a873f325fbf931bed77d71afb5a02ca431d",
+      "executable": false
+    },
+    "skills/requesting-code-review/code-reviewer.md": {
+      "sha256": "82e370be6b3447523816286195571e4216ba56ba1ad6ad0e87862294c4c78dcb",
+      "executable": false
+    },
+    "skills/subagent-driven-development/SKILL.md": {
+      "sha256": "8dde5589ee083fb4999106d116f01c8fdaf3116a8a9813fdedeb80329de49046",
+      "executable": false
+    },
+    "skills/subagent-driven-development/agents/openai.yaml": {
+      "sha256": "58ef494a996998f2a486a0764b769bdf02e9c148b050b38603dbcdb364ae2771",
+      "executable": false
+    },
+    "skills/subagent-driven-development/implementer-prompt.md": {
+      "sha256": "81dd9d5a3fb0b09b96b5829f03b9796842f3199ef7591d1ba1c2db2a515f64d0",
+      "executable": false
+    },
+    "skills/subagent-driven-development/re-review-prompt.md": {
+      "sha256": "0828a5e9cbb12ba49f14621dd8c3953c48c0fc383e75bb5494f055ed0d6d824f",
+      "executable": false
+    },
+    "skills/subagent-driven-development/scripts/review-package": {
+      "sha256": "f9275175b2276b1d5fdb1bae0bedaadd2a950659b7c6f311ea37ff85e1861b1f",
+      "executable": true
+    },
+    "skills/subagent-driven-development/scripts/sdd-workspace": {
+      "sha256": "75ca46c756ba4209ca36e0d3d65567257ceb33bc7a6775b9dad946707cb3bd7b",
+      "executable": true
+    },
+    "skills/subagent-driven-development/scripts/task-brief": {
+      "sha256": "cc563538e09abf719b34ddf4b2fa7a65cf3b301729039dbfa923cb060f729146",
+      "executable": true
+    },
+    "skills/subagent-driven-development/task-reviewer-prompt.md": {
+      "sha256": "bfed55c8f19d0ff6ed57b0fe09127c92890e9311c6c73917129598826bf9ebe8",
+      "executable": false
+    },
+    "skills/systematic-debugging/CREATION-LOG.md": {
+      "sha256": "c24733a5b1821bd6bed1fc950261f0b9f4e90097e0bbb96459d8179713730789",
+      "executable": false
+    },
+    "skills/systematic-debugging/SKILL.md": {
+      "sha256": "808fc5717aa88ad65efff312b11c186294d3e6ee301afb584e2f86599b137787",
+      "executable": false
+    },
+    "skills/systematic-debugging/agents/openai.yaml": {
+      "sha256": "a1ec2b63eb6ac4f79bdea5e0ac4dd9688ead473dbc0ff8aa791f9142778b5386",
+      "executable": false
+    },
+    "skills/systematic-debugging/condition-based-waiting-example.ts": {
+      "sha256": "40ae5ebe497fdf310200e43fe986552546d0a22837c0d39e855db1cfd33eb88e",
+      "executable": false
+    },
+    "skills/systematic-debugging/condition-based-waiting.md": {
+      "sha256": "e89fec8400d6cd50f43407cec9fab50976ba4d55d0ec2eb51c0bd68036b54c26",
+      "executable": false
+    },
+    "skills/systematic-debugging/defense-in-depth.md": {
+      "sha256": "1e175fb86fc357e58c6aebf5441e481e1b7868b4380c0456b63a17eefbd18ba7",
+      "executable": false
+    },
+    "skills/systematic-debugging/find-polluter.sh": {
+      "sha256": "dd7b8f13c4cc2a24b33ff87b18da9248f3e1c80a085c3316224f69ff0fa5c43c",
+      "executable": true
+    },
+    "skills/systematic-debugging/root-cause-tracing.md": {
+      "sha256": "75b933b6a8c40bdb2031b10f21654395b56ec6ab6bc7b018c18d3fe57aeb7fb8",
+      "executable": false
+    },
+    "skills/systematic-debugging/test-academic.md": {
+      "sha256": "fe2ba480d78ac0d686dc025f41c2a32a43d642bf533f91b0c6053a04d35d6486",
+      "executable": false
+    },
+    "skills/systematic-debugging/test-pressure-1.md": {
+      "sha256": "0b6a915db0054577819834c79be9eb614e97bddba10d73768e1fbe91cfed048a",
+      "executable": false
+    },
+    "skills/systematic-debugging/test-pressure-2.md": {
+      "sha256": "b2030aeffba07050e8ad573ddf87486457c4a016a786bb326235bebd856f2016",
+      "executable": false
+    },
+    "skills/systematic-debugging/test-pressure-3.md": {
+      "sha256": "96b50a52e2c7989c9cf20fb752c47c1e9a3a70dc362f8f7989f8f5b64dac7708",
+      "executable": false
+    },
+    "skills/test-driven-development/SKILL.md": {
+      "sha256": "64b03fce4aee5a97a93160cea8111f3ba13a17b7c001db4bd5836d67fd10705d",
+      "executable": false
+    },
+    "skills/test-driven-development/agents/openai.yaml": {
+      "sha256": "d1fd223b137ce6eca628d521031213a2dc002a97865f00e2f6fce03529b9ca05",
+      "executable": false
+    },
+    "skills/test-driven-development/writing-good-tests.md": {
+      "sha256": "51471c853306ff92ca8bb41dcaea05f31c0e46b03651f8f3c99754b7172f4ae1",
+      "executable": false
+    },
+    "skills/using-git-worktrees/SKILL.md": {
+      "sha256": "8cfb86f121269e8f7f12361e6795c4f6738828340e28964c9229d365666c9edd",
+      "executable": false
+    },
+    "skills/using-git-worktrees/agents/openai.yaml": {
+      "sha256": "00bb3e4d6f3448a0c406d3bffc714d5ed597248514646c2f13ef532b93041773",
+      "executable": false
+    },
+    "skills/using-superpowers/SKILL.md": {
+      "sha256": "82c5c8866ad7f5dd4440ce66bd7806ba48a2f13771beae5cf112e53f08fe36ba",
+      "executable": false
+    },
+    "skills/using-superpowers/agents/openai.yaml": {
+      "sha256": "3c5813a85ca812acc399c3081ab73699dce4740b068ab0be73710a58465bfeaa",
+      "executable": false
+    },
+    "skills/using-superpowers/references/antigravity-tools.md": {
+      "sha256": "4880f6de3da4e32f9659ebe7a72b9e0ebfff04e028c2ed96173f86d0387a04c0",
+      "executable": false
+    },
+    "skills/using-superpowers/references/claude-code-tools.md": {
+      "sha256": "21479a3fee27448cab8748a3b5687e53bb257883bda9c070426f9a1ab5cebf1b",
+      "executable": false
+    },
+    "skills/using-superpowers/references/codex-tools.md": {
+      "sha256": "1a38ad9b188c393052f58d95657a1c35ea6aafc8b5a27f198f3922912f70bbe7",
+      "executable": false
+    },
+    "skills/using-superpowers/references/gemini-tools.md": {
+      "sha256": "62b9157bcb0ee3c6784e3d0da0798ddfa5872f9e0c34bea48f3079dabea71965",
+      "executable": false
+    },
+    "skills/using-superpowers/references/hermes-tools.md": {
+      "sha256": "e2185c976a3c87503910e05e2aea58cc89bc8e569bb624b93df9958ac47a9190",
+      "executable": false
+    },
+    "skills/using-superpowers/references/muse-tools.md": {
+      "sha256": "5a1da5c575fe18456ca71cd47ebfd8a38c745f8d82a67fe64d5b83080000eeb3",
+      "executable": false
+    },
+    "skills/using-superpowers/references/pi-tools.md": {
+      "sha256": "703dbc83d23ecab9c6f388460c38abc482e9dee2fe6772a8c7a255152ad3a4d5",
+      "executable": false
+    },
+    "skills/verification-before-completion/SKILL.md": {
+      "sha256": "2befe7fc55bcadaa3d97dd9e8efeb633d2561c0ebe74c5a8b17c4d9e7e4520b3",
+      "executable": false
+    },
+    "skills/verification-before-completion/agents/openai.yaml": {
+      "sha256": "0eaad1a982ab8c95d8b938f1567f207dbc6fd9d172707b1e268e0cc8ab999705",
+      "executable": false
+    },
+    "skills/writing-plans/SKILL.md": {
+      "sha256": "a6c67c1900064347c2a329990dd3c555657c51c3ec53b259a08aa01a2c26139a",
+      "executable": false
+    },
+    "skills/writing-plans/agents/openai.yaml": {
+      "sha256": "de6a2f3d9de78d9c5027512ab1abab998f9acbef70960ecdbad525f4dce2e1bb",
+      "executable": false
+    },
+    "skills/writing-skills/SKILL.md": {
+      "sha256": "bbdfe742f853562e643a3d40d64476359d47881e39cef80a189283fa26d11ab9",
+      "executable": false
+    },
+    "skills/writing-skills/agents/openai.yaml": {
+      "sha256": "c4fafd8a5f3d60328fbf000562dce12d99ec0f25dd016fc0d362ecce9fc02042",
+      "executable": false
+    },
+    "skills/writing-skills/anthropic-best-practices.md": {
+      "sha256": "217629b356c09c9bd11017c9788e8fc654ca1b32c92d4a51cd490e16dd65e59a",
+      "executable": false
+    },
+    "skills/writing-skills/examples/CLAUDE_MD_TESTING.md": {
+      "sha256": "0b379a3415e185d3c434b3ad283d8aa132f3022c2a4f210f168865b5986bcef0",
+      "executable": false
+    },
+    "skills/writing-skills/graphviz-conventions.dot": {
+      "sha256": "e2890a593c91370e384b42f2f67b1a6232c9e69dddea7891a0c1c46d7b20b694",
+      "executable": false
+    },
+    "skills/writing-skills/persuasion-principles.md": {
+      "sha256": "a51bc9bf75189ea73a27b3fb504a2fdfdb966fb1f7f1cdf03203230a216ccc03",
+      "executable": false
+    },
+    "skills/writing-skills/render-graphs.js": {
+      "sha256": "c7f412cc629461c4d10287e668731874c0497707023e3e3f74a5355eb2cee196",
+      "executable": true
+    },
+    "skills/writing-skills/testing-skills-with-subagents.md": {
+      "sha256": "c711346852c911b24a84aa161e0cff06a4cd7f4e2fa9e9c0a266cead5afcbade",
+      "executable": false
+    },
+    "LICENSE": {
+      "sha256": "a37e0e9697144819e1d965176ac4ae5bc3fa02d11e7812036bbcadf6dafe2400",
+      "executable": false
+    }
+  }
+}
