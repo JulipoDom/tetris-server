@@ -1,1 +1,1 @@
-"""Local logic for one cooperative, two-player Tetris match."""
+"""Lógica local para uma partida cooperativa de Tetris com dois jogadores."""

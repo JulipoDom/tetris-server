@@ -1,4 +1,4 @@
-"""Repeatable scenarios using local objects only, with no serialization."""
+"""Cenários repetíveis usando somente objetos locais, sem serialização."""
 
 from dataclasses import dataclass
 
@@ -16,7 +16,7 @@ class ScenarioReport:
 
 
 def _pair() -> ServerApp:
-    """Create a fresh local match with two scripted participant identities."""
+    """Cria uma nova partida local com duas identidades de participantes predefinidas."""
     app = ServerApp()
     app.process(Command('join', 'player1', 'Jogador_A'))
     app.process(Command('join', 'player2', 'Jogador_B'))
@@ -24,13 +24,13 @@ def _pair() -> ServerApp:
 
 
 def _start(app: ServerApp) -> None:
-    """Submit each participant's readiness to authorize the local match."""
+    """Registra a prontidão de cada participante para autorizar a partida local."""
     app.process(Command('ready', 'player1'))
     app.process(Command('ready', 'player2'))
 
 
 def _expect_rejection(app: ServerApp, command: Command) -> None:
-    """Require invalid scenario input to raise the expected domain error."""
+    """Exige que a entrada inválida do cenário gere o erro de domínio esperado."""
     try:
         app.process(command)
     except DomainError:
@@ -39,12 +39,12 @@ def _expect_rejection(app: ServerApp, command: Command) -> None:
 
 
 def _report(name: str, app: ServerApp) -> ScenarioReport:
-    """Capture the scenario's final state, result, and log records."""
+    """Captura o estado final, o resultado e os registros do cenário."""
     return ScenarioReport(name, app.controller.state, app.controller.result, tuple(app.logs))
 
 
 def run_simulations() -> tuple[ScenarioReport, ...]:
-    """Run eight isolated scripted scenarios through the real local dispatcher."""
+    """Executa oito cenários predefinidos e isolados pelo dispatcher local real."""
     reports = []
 
     app = _pair()
@@ -98,7 +98,7 @@ def run_simulations() -> tuple[ScenarioReport, ...]:
     result = app.controller.result
 
     def unavailable(event):
-        """Inject delivery failure for player1 while allowing player2 outputs."""
+        """Injeta falha de entrega para player1, permitindo as saídas de player2."""
         if event.recipient == 'player1':
             raise OSError('Simulated local delivery failure')
 

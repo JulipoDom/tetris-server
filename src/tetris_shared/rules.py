@@ -1,4 +1,4 @@
-"""Common game values and reserved defaults for future EP networking."""
+"""Valores comuns do jogo e padrões reservados para a futura rede do EP."""
 
 BOARD_ROWS = 20
 BOARD_COLUMNS = 10

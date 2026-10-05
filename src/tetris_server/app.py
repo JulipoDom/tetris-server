@@ -1,6 +1,6 @@
-"""Sequential local dispatcher and in-memory output queues.
+"""Dispatcher local sequencial e filas de saída em memória.
 
-Callbacks consume Python objects. This module performs no network I/O.
+As funções de retorno consomem objetos Python. Este módulo não realiza E/S de rede.
 """
 
 from collections.abc import Callable, Hashable
@@ -20,13 +20,13 @@ class LocalRecord:
 
 class ServerApp:
     def __init__(self, controller: MatchController | None = None):
-        """Prepare a controller, per-session output queues, and local logs."""
+        """Prepara um controlador, filas de saída por sessão e registros locais."""
         self.controller = controller if controller is not None else MatchController()
         self.outboxes: dict[Hashable, list[OutboundEvent]] = {}
         self.logs: list[LocalRecord] = []
 
     def process(self, command: Command) -> tuple[OutboundEvent, ...]:
-        """Process one fact completely before the caller supplies the next."""
+        """Processa um fato por completo antes de receber o próximo."""
         operations = {
             'join': lambda: self.controller.join(command.session, command.payload),
             'ready': lambda: self.controller.ready(command.session),
@@ -53,26 +53,26 @@ class ServerApp:
         return events
 
     def _enqueue(self, events: tuple[OutboundEvent, ...]) -> None:
-        """Queue effects, replacing only older unconsumed board snapshots."""
+        """Enfileira efeitos, substituindo apenas cópias antigas de tabuleiro não consumidas."""
         for event in events:
             queue = self.outboxes.setdefault(event.recipient, [])
             if event.kind == MessageType.BOARD:
-                # Remove the stale visual and append its replacement at the
-                # current position, preserving intervening attacks and GO.
+                # Remove a imagem antiga e acrescenta sua substituta na
+                # posição atual, preservando os ataques intermediários e GO.
                 queue[:] = [pending for pending in queue if pending.kind != MessageType.BOARD]
             queue.append(event)
             self.logs.append(LocalRecord(self.controller.state, event.recipient,
                                          event.kind.value))
 
     def deliver(self, sender: Callable[[OutboundEvent], None]) -> None:
-        """Drain local queues; callback failure becomes a disconnect fact.
+        """Esvazia as filas locais; falha da função de retorno vira um fato de desconexão.
 
-        The controller has already recorded any result before delivery starts.
-        A callback returning normally consumes the event; it promises no wire
-        delivery. A failed recipient's remaining local outputs are cleared.
+        O controlador já registrou qualquer resultado antes de iniciar a entrega.
+        Uma função de retorno que termina normalmente consome o evento; ela não garante
+        entrega pela rede. As saídas locais restantes do destinatário com falha são removidas.
         """
-        # A disconnect can enqueue a result for a recipient already visited.
-        # Continue until those newly generated outputs are consumed as well.
+        # Uma desconexão pode enfileirar um resultado para um destinatário já visitado.
+        # Continua até consumir também essas novas saídas.
         while any(self.outboxes.values()):
             for session, queue in list(self.outboxes.items()):
                 while queue:

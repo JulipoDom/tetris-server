@@ -1,4 +1,4 @@
-"""Sequential two-slot domain; no sockets, timers, or client physics."""
+"""Domínio sequencial com duas posições, sem sockets, temporizadores ou física do cliente."""
 
 import re
 from collections.abc import Hashable, Sequence
@@ -15,48 +15,48 @@ from tetris_shared.rules import (
 
 
 class DomainError(ValueError):
-    """An invalid local operation, for the adapter to handle."""
+    """Uma operação local inválida, a ser tratada pelo adaptador."""
 
 
 class MatchController:
-    """Call from one sequential dispatcher; each call returns all its effects."""
+    """Deve ser chamado por um dispatcher sequencial; cada chamada retorna todos os seus efeitos."""
 
     def __init__(self):
-        """Create two empty player slots with no final decision."""
+        """Cria duas posições vazias de jogador, sem decisão final."""
         self._state = MatchState.WAITING
         self._result: MatchResult | None = None
         self._players: list[Player | None] = [None, None]
 
     @property
     def state(self) -> MatchState:
-        """Expose the current phase without allowing external assignment."""
+        """Expõe a fase atual sem permitir atribuição externa."""
         return self._state
 
     @property
     def result(self) -> MatchResult | None:
-        """Return the fixed final decision, or None while unfinished."""
+        """Retorna a decisão final imutável, ou None enquanto não houver encerramento."""
         return self._result
 
     @property
     def player1(self) -> Player | None:
-        """Return the first slot's immutable participant record."""
+        """Retorna o registro imutável do participante da primeira posição."""
         return self._players[0]
 
     @property
     def player2(self) -> Player | None:
-        """Return the second slot's immutable participant record."""
+        """Retorna o registro imutável do participante da segunda posição."""
         return self._players[1]
 
     @staticmethod
     def _validate_session(session):
-        """Require a session token usable as an outbox dictionary key."""
+        """Exige uma referência de sessão utilizável como chave do dicionário de saídas."""
         try:
             hash(session)
         except TypeError as error:
             raise DomainError("Session must be hashable") from error
 
     def _index(self, session) -> int:
-        """Find the registered slot; reject unknown participant sessions."""
+        """Localiza a posição registrada; rejeita sessões de participantes desconhecidas."""
         self._validate_session(session)
         for index, player in enumerate(self._players):
             if player is not None and player.session == session:
@@ -64,12 +64,12 @@ class MatchController:
         raise DomainError("Unknown participant session")
 
     def _require_playing(self):
-        """Prevent gameplay effects before both players have started."""
+        """Impede efeitos de jogo antes do início autorizado para ambos os jogadores."""
         if self.state != MatchState.PLAYING:
             raise DomainError("Operation requires an active match")
 
     def join(self, session: Hashable, nickname: str) -> tuple[OutboundEvent, ...]:
-        """Register a player and emit MATCH when both slots are occupied."""
+        """Registra um jogador e emite MATCH quando ambas as posições estão ocupadas."""
         self._validate_session(session)
         if self.state == MatchState.FINISHED:
             raise DomainError("This execution's match is finished")
@@ -90,7 +90,7 @@ class MatchController:
         )
 
     def ready(self, session: Hashable) -> tuple[OutboundEvent, ...]:
-        """Mark readiness and emit one GO per player when both are ready."""
+        """Registra prontidão e emite um GO por jogador quando ambos estão prontos."""
         index = self._index(session)
         if self.state in (MatchState.FINISHED, MatchState.PLAYING):
             return ()
@@ -103,7 +103,7 @@ class MatchController:
         return tuple(OutboundEvent(p.session, MessageType.READY, "GO") for p in self._players)
 
     def attack(self, session: Hashable, quantity: int) -> tuple[OutboundEvent, ...]:
-        """Validate garbage quantity and forward it unchanged to the opponent."""
+        """Valida a quantidade de lixo e a encaminha sem alteração ao oponente."""
         index = self._index(session)
         if self.state == MatchState.FINISHED:
             return ()
@@ -114,7 +114,7 @@ class MatchController:
 
     @staticmethod
     def _snapshot(cells) -> Snapshot:
-        """Validate the 20x10 board and copy its cells into immutable rows."""
+        """Valida o tabuleiro 20x10 e copia suas células para linhas imutáveis."""
         if not isinstance(cells, Sequence) or isinstance(cells, (str, bytes)) or len(cells) != BOARD_ROWS:
             raise DomainError("Board must have 20 rows")
         rows = []
@@ -127,7 +127,7 @@ class MatchController:
         return tuple(rows)
 
     def board(self, session: Hashable, cells) -> tuple[OutboundEvent, ...]:
-        """Store the sender's latest fixed board and emit it to the opponent."""
+        """Armazena o tabuleiro fixo mais recente do remetente e o emite ao oponente."""
         index = self._index(session)
         if self.state == MatchState.FINISHED:
             return ()
@@ -137,8 +137,8 @@ class MatchController:
         return (OutboundEvent(self._players[1 - index].session, MessageType.BOARD, snapshot),)
 
     def _finish(self, reason: EndReason, outcomes, recipients) -> tuple[OutboundEvent, ...]:
-        """Record the decision before producing each recipient's GAMEOVER."""
-        # Commit the decision before constructing any output for the adapter.
+        """Registra a decisão antes de produzir GAMEOVER para cada destinatário."""
+        # Registra a decisão antes de construir qualquer saída para o adaptador.
         self._result = MatchResult(reason, tuple(outcomes))
         self._state = MatchState.FINISHED
         return tuple(OutboundEvent(session, MessageType.GAMEOVER,
@@ -146,7 +146,7 @@ class MatchController:
                      for session in recipients)
 
     def ko(self, session: Hashable, cause: str) -> tuple[OutboundEvent, ...]:
-        """Finalize a local loss; a KO before play becomes a protocol failure."""
+        """Finaliza uma derrota local; KO antes do jogo vira falha de protocolo."""
         index = self._index(session)
         if self.state == MatchState.FINISHED:
             return ()
@@ -160,7 +160,7 @@ class MatchController:
                             (opponent, session))
 
     def failure(self, session: Hashable, reason: EndReason) -> tuple[OutboundEvent, ...]:
-        """Cancel before play or award the opponent a win for a failure fact."""
+        """Cancela antes do jogo ou concede vitória ao oponente diante de um fato de falha."""
         index = self._index(session)
         if self.state == MatchState.FINISHED:
             return ()
@@ -179,7 +179,7 @@ class MatchController:
         return self._finish(reason, outcomes, recipients)
 
     def stop(self) -> tuple[OutboundEvent, ...]:
-        """Cancel a running execution without replacing an existing result."""
+        """Cancela uma execução em andamento sem substituir um resultado existente."""
         if self.state == MatchState.FINISHED:
             return ()
         sessions = tuple(p.session for p in self._players if p is not None)

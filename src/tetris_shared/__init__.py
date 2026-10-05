@@ -1,1 +1,1 @@
-"""Shared domain models and rules, independent of UI and networking."""
+"""Modelos e regras de domínio compartilhados, independentes de interface e rede."""

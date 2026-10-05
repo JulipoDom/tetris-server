@@ -1,4 +1,4 @@
-"""Typed Python objects exchanged by the domain and local adapter."""
+"""Objetos Python tipados trocados entre o domínio e o adaptador local."""
 
 from collections.abc import Hashable
 from dataclasses import dataclass
@@ -60,7 +60,7 @@ class MatchResult:
     outcomes: tuple[tuple[Hashable, Outcome], ...]
 
     def outcome_for(self, session: Hashable) -> Outcome:
-        """Look up a participant's stored outcome; unknown sessions raise KeyError."""
+        """Consulta o resultado armazenado de um participante; sessões desconhecidas geram KeyError."""
         for participant, outcome in self.outcomes:
             if participant == session:
                 return outcome

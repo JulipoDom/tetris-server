@@ -1,4 +1,4 @@
-"""Behavioral checks for the local, single-match domain."""
+"""Verificações de comportamento do domínio local de partida única."""
 
 import unittest
 from dataclasses import FrozenInstanceError
@@ -104,7 +104,7 @@ class MatchTests(unittest.TestCase):
         self.play()
         self.match.board(self.a, [[0] * 10 for _ in range(20)])
         original = self.match.player1.snapshot
-        # Include scalar and cell-type failures independently of dimensions.
+        # Inclui falhas de valores escalares e tipos de células independentemente das dimensões.
         invalid = [None, "0" * 200, [], [[0] * 10] * 19,
                    [[0] * 9] * 20, [None] * 20]
         invalid += [[[value] * 10 for _ in range(20)]

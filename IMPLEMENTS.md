@@ -1,234 +1,145 @@
-# Implementation guide
+# Guia de implementação do servidor
 
-This file describes the current server boilerplate, where the team must implement
-networking by hand, and how to follow the local simulation. The authoritative
-requirements are [00-contexto-geral.md](00-contexto-geral.md) and
-[02-boilerplate-servidor.md](02-boilerplate-servidor.md).
+A lógica da partida, o dispatcher sequencial e a comunicação por callbacks com
+threads estão implementados. O transporte TCP **da partida**, o protocolo TVP/1
+e seus temporizadores continuam pendentes em `TODO[EP-REDE]`.
 
-The match logic is implemented. TCP connections, the TVP/1 byte protocol, and
-network timers are not implemented. `TODO[EP-REDE]` marks the pending boundary.
+As regras estão em [00-contexto-geral.md](00-contexto-geral.md) e
+[02-boilerplate-servidor.md](02-boilerplate-servidor.md). O diagnóstico TCP local
+é uma ferramenta separada: não implementa o protocolo ou a comunicação do jogo.
 
-## 1. What is implemented, and how
+## Fluxo implementado
 
-| Feature | Code to read | How it works |
-| --- | --- | --- |
-| Shared message and state types | [models.py](src/tetris_shared/models.py) | Enums name the eight wire types, four match phases, outcomes, and ending reasons. Frozen dataclasses carry players, commands, output events, and results. These are Python objects, not encoded packets. |
-| Common validation values | [rules.py](src/tetris_shared/rules.py) | Defines board dimensions, valid cell values, attack quantities, nickname format, and KO causes. Network limits are declared here but are not enforced by a transport yet. |
-| Two identified participants | `MatchController.join()` in [match.py](src/tetris_server/match.py) | Uses two slots. Validates nickname and session, rejects duplicate identification and a third participant. Equal nicknames are allowed because the session token identifies a player. The second join produces MATCH events for both players. |
-| Readiness and start | `MatchController.ready()` | Repeated readiness has no duplicate effects. Both ready players move the match to PLAYING and produce one READY event with payload `GO` per player. |
-| Attack forwarding | `MatchController.attack()` | Accepts only integer 1, 2, or 4 during play, rejecting booleans. Sends the same garbage quantity to the other slot. It does not calculate line clears or apply garbage. |
-| Board validation and forwarding | `MatchController._snapshot()` and `.board()` | Require 20 rows of 10 integer cells from 0 through 8. Copy into tuples, store the latest snapshot, and produce a BOARD event for the opponent. Changes to the caller's matrix cannot alter that snapshot. |
-| One final result | `MatchController.ko()` and `._finish()` | The first valid ending records a frozen result and FINISHED state before producing GAMEOVER events. A valid KO during play gives the opponent WIN and the sender LOSE. Late events from known players do not create new effects. |
-| Failure policies | `MatchController.failure()` and `.stop()` | Receive disconnect, timeout, and protocol-failure facts. Before play, failure cancels; during play, the opponent wins. Planned stop cancels. The domain does not detect real network failures or elapsed time. |
-| Sequential command processing | `ServerApp.process()` in [app.py](src/tetris_server/app.py) | Maps a local command to a controller method, records logs, and queues returned events before accepting the next command. Domain errors are logged and re-raised for the caller to handle. |
-| Local output queues | `ServerApp._enqueue()` | Maintains `outboxes[session]`. Only older unconsumed BOARD events can be replaced. Replacement is appended at the current position, preserving intervening attacks and start authorization. |
-| Callback delivery and injected failures | `ServerApp.deliver()` | Passes queued Python events to a callback. An exception clears that recipient's remaining queue and injects DISCONNECT. It also drains result events generated for an already-visited survivor. Delivery failure cannot revise a recorded result. |
-| CLI and local scenarios | [__main__.py](src/tetris_server/__main__.py), [simulation.py](src/tetris_server/simulation.py) | Default/simulated mode runs eight scripted scenarios. Network mode reports the marked stub and exits with status 2. |
-| Behavioral tests | [test_server.py](tests/test_server.py), [test_app.py](tests/test_app.py) | Cover lifecycle, validation, copying, forwarding order, failures in either recipient position, first-result preservation, CLI modes, and pending stubs. |
-
-Each function in `src/` has a short explanatory docstring. Start with the public
-controller methods; underscore-prefixed functions are internal helpers.
-
-### State and data flow
+| Arquivo | Responsabilidade atual |
+| --- | --- |
+| [models.py](src/tetris_shared/models.py) | Comandos, participantes, eventos e resultados tipados; dataclasses imutáveis. |
+| [rules.py](src/tetris_shared/rules.py) | Validações do jogo e constantes reservadas para a rede. |
+| [match.py](src/tetris_server/match.py) | Dois jogadores, prontidão, encaminhamento, validação e resultado único. |
+| [app.py](src/tetris_server/app.py) | Despacho sequencial, registros, caixas de saída e falhas de entrega. |
+| [communication.py](src/tetris_server/communication.py) | Uma thread de recebimento e outra de envio, coordenadas por filas e callbacks. |
+| [network.py](src/tetris_server/network.py) | Montagem do coordenador e stubs do transporte TCP da partida. |
+| [network_diagnostic.py](src/tetris_server/network_diagnostic.py) | Troca TCP local de bytes predefinidos, com duas threads. |
+| [simulation.py](src/tetris_server/simulation.py) | Oito cenários independentes com objetos em memória. |
+| [__main__.py](src/tetris_server/__main__.py) | Seleção dos modos `simulated`, `network` e `network-test`. |
 
 ```mermaid
 flowchart LR
-    W[WAITING] -->|second valid join| P[PREPARING]
-    P -->|both ready| G[PLAYING]
-    G -->|KO or participant failure| F[FINISHED]
-    W -->|identified failure or stop| F
-    P -->|identified failure or stop| F
-    G -->|planned stop| F
+    R[Thread de recebimento] --> Q[Fila de comandos]
+    Q --> D[Dispatcher na thread chamadora]
+    D --> A[ServerApp e MatchController]
+    A --> O[Caixas de saída]
+    O --> E[Thread de envio]
+    E --> F[Conclusão ou exceção do callback]
+    F --> D
 ```
 
-`Command` → `ServerApp.process()` → `MatchController` → `OutboundEvent` →
-`ServerApp.outboxes`. A future transport will encode and send those events.
-The existing local `deliver()` helper instead hands objects to a callback.
+Somente o dispatcher altera estado e resultado. Os estados seguem
+`WAITING → PREPARING → PLAYING → FINISHED`. Falhas ou parada planejada também
+podem finalizar antes de PLAYING. O primeiro encerramento válido determina o
+resultado imutável; falhas posteriores de entrega não o modificam.
 
-## 2. What must be implemented by hand
+`NetworkServer.prepare_communication()` monta `CommunicationThreads` sem abrir
+sockets nem iniciar threads. `CommunicationThreads.run()` inicia as duas threads
+e mantém o dispatcher na thread que o chamou. Cada coordenador executa uma vez.
+O modo `network` ainda não chama o coordenador: falha explicitamente com o TODO.
 
-There are **four executable stub entry points**. Every one currently raises
-`NotImplementedError`; module comments describe the intended work.
+O callback `receive(stop)` retorna um `Command` ou `None` ao encerrar a fonte.
+Deve observar o sinal de parada e interromper esperas. A fila de entrada é
+limitada e aplica contrapressão. O callback `send(event)` deve terminar ou lançar
+uma exceção; o dispatcher aguarda sua conclusão antes de continuar. Isso preserva
+a ordem e permite tratar falhas via `ServerApp.deliver()`, sem garantir entrega
+remota. Fim da fonte antes do resultado gera `Command('stop')`.
 
-| Exact entry point | Manual implementation |
+## Onde implementar TCP da partida
+
+Use `socket` da biblioteca padrão, com `AF_INET` e `SOCK_STREAM`, em
+[network.py](src/tetris_server/network.py). Não coloque sockets no domínio.
+
+| Método pendente | Implementação necessária |
 | --- | --- |
-| `NetworkServer.run()` in [network.py](src/tetris_server/network.py) | Build the TCP listener and event loop, reserve connection slots, associate sessions, receive/send buffers, detect failures, schedule timers, and close after the one final match. Extract focused helpers as needed; these helpers do not exist yet. |
-| `encode(event)` in [protocol.py](src/tetris_shared/protocol.py) | Convert outgoing MATCH, READY/GO, BOARD, ATTACK, GAMEOVER, and scheduled KEEPALIVE events to valid ASCII TVP/1 lines ending in LF. Flatten BOARD's 20×10 tuple into 200 digits. |
-| `decode(frame)` in [protocol.py](src/tetris_shared/protocol.py) | Validate a complete frame's grammar and fields, then convert gameplay input into the corresponding local command. Decide explicitly whether this function consumes or receives an already-stripped LF. Bind the trusted sender session in the adapter, not from client data. |
-| `StreamParser.feed(data)` in [protocol.py](src/tetris_shared/protocol.py) | Keep a byte buffer per connection, process all complete LF-delimited messages, and retain the incomplete fragment. Enforce the byte limit even if LF has not arrived. One `recv()` can contain half a message or several messages. |
+| `NetworkServer.run()` | Criar o listener com `bind()` e `listen()`, coordenar admissão via `accept()`, preparar a comunicação, executar o dispatcher e fechar os recursos ao terminar a única partida. |
+| `NetworkServer.receive_command(stop)` | Observar as duas conexões, preservar leituras parciais, validar mensagens, associar sessões confiáveis e devolver comandos ou fatos de falha. Observar `stop` e não bloquear indefinidamente. |
+| `NetworkServer.send_event(event)` | Localizar a conexão do destinatário, codificar o evento, preservar bytes não enviados e cumprir limites e prazos. |
+| `encode(event)` em [protocol.py](src/tetris_shared/protocol.py) | Produzir ASCII TVP/1 terminado por LF; BOARD contém exatamente 200 dígitos. |
+| `decode(frame)` | Validar gramática, direção e campos e produzir entrada tipada; a sessão vem do adaptador, nunca do cliente. |
+| `StreamParser.feed(data)` | Guardar fragmentos e extrair todas as linhas completas; limitar linhas e fragmentos a 512 bytes incluindo LF. |
 
-### Recommended manual implementation checklist
+O recebimento precisa observar ambos os sockets sem esperar indefinidamente por
+um jogador; I/O não bloqueante e `selectors` podem ajudar. Não crie threads que
+alterem livremente a partida. A preparação atual não implementa buffers de bytes,
+prazos de rede, associação de conexões ou admissão.
 
-1. **Codec and stream framing — `protocol.py`.**
-   - [ ] Require ASCII, prefix `TVP/1`, exact field counts, and LF termination.
-   - [ ] Reject CR, spaces, extra fields, unknown tokens, and incompatible prefixes.
-   - [ ] Validate nickname `[A-Za-z0-9_]{1,20}`, BOARD exactly 200 digits `[0-8]`, ATTACK 1/2/4, READY PLAYER/GO, KO SPAWN/OVERFLOW, and valid GAMEOVER fields.
-   - [ ] Limit the complete line to 512 bytes including LF; reject oversized fragments.
-   - [ ] Test split messages, multiple messages per read, trailing fragments, invalid ASCII, and exact size boundaries.
+### Ordem sugerida de implementação
 
-2. **Connection admission and identity — `network.py`.**
-   - [ ] Open a TCP listener using direct sockets; use a sequential nonblocking loop, optionally `selectors`.
-   - [ ] Reserve at most two connections, including clients that have not sent HELLO yet. Close a third immediately without a new message type.
-   - [ ] Give each connection a stable, hashable session token.
-   - [ ] Require one valid HELLO as the first message. Only then call `Command('join', session, nickname)`.
-   - [ ] Release failed/unidentified connection reservations without affecting the existing participant. Never replace an identified participant after departure.
+1. Implementar codec e framing em `protocol.py`, com testes de fragmentos,
+   múltiplas mensagens por leitura, ASCII inválido e limites de tamanho.
+2. Criar listener e reservar no máximo duas conexões, inclusive aguardando HELLO.
+   Fechar uma terceira sem mensagem extra. Criar referências opacas de sessão.
+3. Exigir HELLO inicial válido; liberar reservas não identificadas que falharem,
+   sem cancelar outro jogador. Participantes identificados não são substituídos.
+4. Implementar recebimento e envio por callbacks e iniciar o coordenador.
+   Preservar ordem de GO, ataques e resultados; substituir somente snapshots
+   ainda não serializados. Não substituir bytes parcialmente enviados.
+5. Implementar limite de saída de 4096 bytes por conexão e falhas de I/O.
+   Entrada inválida de participante identificado exige PROTOCOL; apenas registrar
+   `DomainError` não aplica automaticamente essa política no adaptador.
+6. Implementar HELLO em até 5 s, KEEPALIVE a cada 5 s após HELLO, sem eco imediato,
+   e TIMEOUT após 15 s sem mensagem completa válida. Usar relógio monotônico.
+7. Após resultado, tentar escoar notificações por até 1 s, sinalizar parada,
+   encerrar threads e sockets. Testar comunicação real entre dois participantes,
+   recusa do terceiro, falhas antes/depois da identificação e escritas parciais.
 
-3. **Route protocol input to existing domain operations — `network.py`.**
-   - [ ] Enforce message direction and match phase before dispatch.
-   - [ ] Map accepted client messages using the table below; reject clients sending MATCH, READY/GO, or GAMEOVER.
-   - [ ] Convert invalid input from an identified participant to a PROTOCOL failure and close the offending connection. A logged `DomainError` does not automatically apply this policy.
-   - [ ] Preserve one-command-at-a-time processing. Queue both GO events before accepting gameplay effects.
-
-4. **Output buffers and partial writes — `network.py` + `encode()`.**
-   - [ ] Encode outgoing events and retain bytes that `send()` did not write.
-   - [ ] Enforce 4096 pending output bytes per connection; exceeding the cap becomes a connection failure.
-   - [ ] Preserve attacks and results. Coalesce only snapshots not yet serialized; never replace a partially transmitted message.
-   - [ ] Treat connection closure or failed I/O as DISCONNECT for identified participants. Keep the recorded result if notification delivery fails later.
-   - [ ] Keep byte-buffer handling separate from the existing object-callback `deliver()` helper; that helper does not implement partial writes or delivery confirmation.
-
-5. **Activity timers — `network.py`, using defaults from `rules.py`.**
-   - [ ] Enforce HELLO within 5 seconds of acceptance.
-   - [ ] After validating HELLO, send KEEPALIVE every 5 seconds, even when other traffic exists. Never immediately echo it.
-   - [ ] Update last activity only after receiving a complete valid message.
-   - [ ] After 15 seconds without such activity, report TIMEOUT for an identified participant.
-   - [ ] Use a monotonic clock; inject a clock in timer tests to avoid real waits.
-
-6. **Shutdown and actual integration — `network.py` and network tests.**
-   - [ ] Route a planned stop to `Command('stop')`.
-   - [ ] After finalization, allow up to 1 second to drain notifications, then close sockets and end the process. Do not start another match in the same execution.
-   - [ ] Test two real TCP peers, third-connection refusal, unidentified failures, deadlines, partial I/O, and failures before/after finalization.
-   - [ ] Verify end-to-end communication separately from the existing in-memory tests.
-
-### Incoming messages and local commands
-
-| Future client input | Existing local operation |
+| Entrada aceita do cliente | Comando local |
 | --- | --- |
-| HELLO with nickname | `Command('join', session, nickname)` after initial-handshake validation. |
-| READY with PLAYER | `Command('ready', session)` after MATCH. |
-| BOARD with 200 digits | Convert to 20×10 integer rows, then `Command('board', session, rows)`. |
-| ATTACK with quantity | `Command('attack', session, quantity)` with an integer payload. |
-| KO with cause | `Command('ko', session, cause)`. |
-| KEEPALIVE | Adapter-only activity bookkeeping. No match command and no immediate reply. |
-| Socket failure / timeout / protocol violation | `Command('failure', session, EndReason.DISCONNECT / TIMEOUT / PROTOCOL)` for identified participants. These facts are not additional wire types. |
+| HELLO | `Command('join', session, nickname)` |
+| READY/PLAYER | `Command('ready', session)` |
+| BOARD | `Command('board', session, rows)` com matriz 20×10 |
+| ATTACK | `Command('attack', session, quantity)` com inteiro 1, 2 ou 4 |
+| KO | `Command('ko', session, cause)` |
+| KEEPALIVE | Controle de atividade no adaptador, sem comando de jogo ou eco imediato |
+| Desconexão, timeout ou violação | `Command('failure', session, reason)` para participante identificado |
+| Parada planejada | `Command('stop')` |
 
-The `Command` model allows an omitted session, but participant commands must be
-bound to the actual connection by the future adapter. `Command('stop')` is local
-administrative input. The final codec/adapter design must account for KEEPALIVE
-without inventing an unsupported `ServerApp.process()` operation.
+Esses comandos internos não são tipos extras de mensagem. Física, pontuação e
+aplicação de lixo pertencem ao cliente, ausente deste repositório.
 
-The client engine and terminal UI are absent from this repository. Piece physics,
-line clearing, scoring, garbage application, and local KO detection belong to
-the client, not to the remaining server implementation. Rooms, matchmaking,
-reconnection, databases, and extra message types stay outside the project scope.
-
-## 3. How the simulation works
-
-Run from the repository root:
+## Modos de execução
 
 ```bash
 PYTHONPATH=src python -m tetris_server --mode simulated
-```
-
-`main()` calls `run_simulations()`. Each scenario starts a fresh `ServerApp`
-containing a fresh `MatchController`. Strings such as `player1` and `player2`
-stand in for session identities; `Jogador_A` and `Jogador_B` are nicknames.
-The script injects `Command` objects through the real dispatcher and controller.
-There are no real clients, sockets, byte packets, game physics, or timing waits.
-
-Each fixture exercises one match. The CLI runs several independent fixtures in
-sequence for demonstration; this does not implement a production multi-match
-server. Each `ScenarioReport` captures a name, final state, immutable result,
-and a tuple of log records. The CLI prints the logs, not a rendered board or
-the full per-player result object.
-
-### Trace the normal match
-
-Read the first block of `run_simulations()` in [simulation.py](src/tetris_server/simulation.py):
-
-| Step | Injected command | Observable effect |
-| --- | --- | --- |
-| 1 | `_pair()` joins player1, then player2 | WAITING becomes PREPARING; each outbox receives MATCH with the other nickname. |
-| 2 | `_start(app)` marks each player ready | The second READY makes PLAYING; each outbox receives READY with `GO`. |
-| 3 | ATTACK from player1 with quantity 2 | Player2 gets an ATTACK event containing 2. No board garbage is applied by the server. |
-| 4 | BOARD from player1 | A mostly empty 20×10 matrix with an 8 at row 19, column 0 is copied into immutable tuples and queued for player2. |
-| 5 | KO/SPAWN from player1 | FINISHED is recorded first. Player2 has WIN/KO; player1 has LOSE/KO. Both get queued GAMEOVER events. |
-| 6 | `_report('complete_match', app)` | Captures state, result, and logs for the CLI to print. |
-
-Most scenarios leave events in the local outboxes; queuing an event is enough to
-inspect its intended recipient and payload. They do not call a callback for
-every output. The delivery-failure scenario specifically exercises `deliver()`.
-
-### The eight scenarios
-
-| Printed name | What happens |
-| --- | --- |
-| `complete_match` | Two joins, two readiness commands, an attack, a snapshot, and player1 KO. |
-| `third_participant_refused` | A third join raises `DomainError`; the original pair plays and player2 loses by OVERFLOW. |
-| `first_ko_player1` | Duplicate readiness produces no extra start. Player1 KO is processed first; player2's later KO cannot change the result. |
-| `first_ko_player2` | Reverses the KO order, so player2 is the recorded loser. |
-| `departure_before_play` | An injected player1 DISCONNECT during preparation records cancellation. |
-| `departure_during_play` | The same failure after start gives player2 a win. |
-| `invalid_inputs` | A malformed board, boolean attack, and unknown session are expected to raise domain errors. Planned stop then cancels the fixture. |
-| `delivery_failure` | Initial outputs are consumed by a no-op callback. Player1 KO records the result; a second callback raises for player1's GAMEOVER. The result stays unchanged and player2's output can still be consumed. |
-
-Expected input rejection is logged as `rejected` and caught by
-`_expect_rejection()`, allowing the scenario to continue. Unexpected failure
-stops the run. A few scenarios use assertions for result preservation; the
-`unittest` suite provides the broader automated checks.
-
-### Read the printed logs
-
-Example lines:
-
-```text
-Scenario: complete_match state=FINISHED
-  state=PREPARING participant=player2 occurrence=join reason=-
-  state=PLAYING participant=player1 occurrence=READY reason=-
-  state=FINISHED participant=player1 occurrence=ko reason=KO
-```
-
-The scenario heading shows its **final** state. Each following record shows the
-state when that command or output was logged. For command records, participant
-is the sender; for output records such as READY and GAMEOVER, it is the intended
-recipient. An output record means the event was queued, not delivered over TCP.
-`reason=-` means that particular log record has no reason field; GAMEOVER's
-outcome and reason live in its `GameOver` payload and the stored match result.
-
-### Inspect an outbox yourself
-
-```bash
-PYTHONPATH=src python - <<'PY'
-from tetris_server.app import ServerApp
-from tetris_shared.models import Command
-
-app = ServerApp()
-for command in (
-    Command('join', 'a', 'Alice'),
-    Command('join', 'b', 'Bob'),
-    Command('ready', 'a'),
-    Command('ready', 'b'),
-    Command('attack', 'a', 2),
-    Command('ko', 'a', 'SPAWN'),
-):
-    app.process(command)
-
-for event in app.outboxes['b']:
-    print(event.kind.value, event.payload)
-print('Final result:', app.controller.result)
-PY
-```
-
-Player b's queue contains MATCH/Alice, READY/GO, ATTACK/2, then GAMEOVER/WIN/KO.
-This example shows object outputs directly and does not serialize TVP/1.
-
-## 4. Check current behavior
-
-```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
 PYTHONPATH=src python -m tetris_server --mode network
+PYTHONPATH=src python -m tetris_server --mode network-test --port 5000
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-The current suite contains 30 tests. Network mode deliberately exits with status
-2 and a `TODO[EP-REDE]` message. Once the team implements networking, replace the
-tests that currently expect unimplemented stubs with codec and integration tests;
-keep the domain and dispatcher regression coverage.
+| Modo | Threads e comportamento |
+| --- | --- |
+| `simulated` | Thread principal; oito cenários locais, sem sockets ou bytes de protocolo. |
+| `network` | Transporte pendente; imprime `TODO[EP-REDE]` e retorna 2, sem simulação alternativa. |
+| `network-test` | Principal coordena uma thread de recebimento e outra de envio. Abre listener TCP em `127.0.0.1`, conecta um cliente local e envia três blocos. Acumula leituras parciais, compara 54 bytes, imprime o fluxo e termina. |
+
+Use `--port 0` no diagnóstico para escolher uma porta livre. Porta inválida,
+ocupada, sockets proibidos ou troca incompleta resultam em erro e código 2.
+O diagnóstico não usa TVP/1, não identifica jogadores e não inicia partida.
+Não copie sua admissão simplificada para o transporte do jogo: ele aceita apenas
+um cliente de diagnóstico e não implementa as políticas da partida.
+
+## Simulações e validação
+
+Cada cenário cria sua própria aplicação e injeta comandos reais no domínio.
+`complete_match` identifica dois participantes, confirma prontidão, encaminha
+ataque e snapshot e finaliza por KO/SPAWN de player1: player2 WIN/KO e player1
+LOSE/KO. As demais simulações cobrem terceiro participante, prontidão repetida,
+ambas as ordens de KO, saída antes/depois do jogo, entradas inválidas e falha de
+entrega após resultado. Nenhuma delas transmite bytes.
+
+Os registros mostram estado, participante, ocorrência e motivo. Um registro de
+saída indica evento enfileirado, não entrega remota. `reason=-` indica ausência
+de motivo naquele registro; o resultado completo está no payload de GAMEOVER
+e no `MatchResult`.
+
+A suíte contém 41 testes: domínio, dispatcher, threads, stubs e diagnóstico.
+Quatro testes de integração exigem sockets locais e são ignorados explicitamente
+se o ambiente os proibir. Na validação disponível, 37 testes passaram e esses
+quatro foram ignorados; a troca TCP real ainda precisa ser validada em ambiente
+com sockets permitidos. Preserve regressões do domínio quando substituir os stubs.

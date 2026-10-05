@@ -1,5 +1,16 @@
 # Servidor Tetris Versus
 
+Repositório remoto: [JulipoDom/tetris-server](https://github.com/JulipoDom/tetris-server).
+Endereço SSH: `git@github.com:JulipoDom/tetris-server.git`.
+
+Em um checkout Git válido, configure o remoto com:
+
+```bash
+git remote add origin git@github.com:JulipoDom/tetris-server.git
+```
+
+Se `origin` já existir, use `git remote set-url origin` com o mesmo endereço.
+
 Estrutura inicial de um servidor Python 3.12+ para um jogo de Tetris no terminal
 com dois jogadores. A lógica local da partida, as simulações e os testes estão
 implementados. A comunicação TCP fica para implementação manual nos pontos
@@ -41,7 +52,7 @@ Para executar os testes:
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
-A suíte atual contém **30 testes**, cobrindo o ciclo da partida, validação,
+A suíte contém 41 testes, cobrindo o ciclo da partida, validação,
 ordem de encaminhamento, cópias e resultados imutáveis, cancelamento, falhas
 de entrega, simulações e os pontos de rede ainda pendentes.
 
@@ -53,6 +64,48 @@ PYTHONPATH=src python -m tetris_server --mode network
 
 Ele imprime `TODO[EP-REDE]: TCP listener, sessions, I/O, buffers, and timers` na
 saída de erro e termina com código **2**. Não muda silenciosamente para a simulação.
+
+### Diagnóstico local de rede com threads
+
+```bash
+PYTHONPATH=src python -m tetris_server --mode network-test --port 5000
+```
+
+Esse modo abre **TCP somente em 127.0.0.1**, inicia uma thread de recebimento
+e outra de envio, aceita um cliente local, envia três blocos de diagnóstico, verifica o fluxo
+recebido e termina. Imprime a porta efetiva, a contagem de bytes e o conteúdo.
+Leituras parciais são acumuladas; TCP não preserva os limites dos envios.
+Use `--port 0` para o sistema escolher uma porta livre. Porta ocupada, inválida,
+recebimento incompleto ou restrição de sockets produz erro e código **2**.
+
+O diagnóstico implementa apenas uma troca TCP local de bytes predefinidos,
+sem iniciar uma partida ou usar TVP/1. O transporte TCP do jogo permanece
+pendente. Testes de integração TCP são ignorados explicitamente quando o ambiente proíbe sockets locais; nesses
+ambientes, executar o diagnóstico também falha explicitamente.
+
+### Preparação da comunicação do jogo
+
+[communication.py](src/tetris_server/communication.py) fornece
+`CommunicationThreads(receive, send, app)`. `run()` inicia uma thread para
+receber comandos tipados e outra para enviar eventos imutáveis. A thread que
+chama `run()` executa exclusivamente `ServerApp.process()` e `deliver()`;
+as threads de comunicação não acessam o estado da partida.
+
+A fila de entrada aplica contrapressão. Os envios são confirmados pelo callback
+antes do próximo despacho, preservando a ordem e permitindo que falhas de envio
+sejam processadas sequencialmente pela política existente. Isso não garante
+entrega remota. Após o resultado, o coordenador sinaliza parada, conclui os
+callbacks de notificações finais e aguarda o encerramento das threads. Fim da
+fonte de comandos antes do resultado gera uma parada planejada. Cada coordenador
+executa apenas uma vez.
+
+O callback `receive(stop)` retorna `Command` ou `None` ao terminar; deve observar
+o `Event` de parada e interromper suas esperas. O callback `send(event)` deve
+terminar ou lançar uma exceção, sem bloquear indefinidamente. O adaptador TCP
+futuro precisa cumprir esses contratos e implementar seus limites e prazos.
+`NetworkServer.prepare_communication()` monta esse coordenador sem iniciar
+threads. `receive_command()` e `send_event()` permanecem stubs com
+`TODO[EP-REDE]`, assim como `NetworkServer.run()`.
 
 ### Instalação opcional
 
@@ -70,8 +123,11 @@ python -m venv .venv
 
 ## Como a execução funciona
 
-`__main__.py` seleciona o modo. O modo simulado chama `run_simulations()`; o modo
-de rede chama `NetworkServer.run()`, que ainda contém uma implementação pendente.
+`__main__.py` seleciona o modo. O modo simulado chama `run_simulations()` na
+thread principal. O modo de rede chama `NetworkServer.run()`, que ainda falha
+explicitamente. O modo `network-test` chama `run_network_test()` e inicia duas
+threads de diagnóstico. As threads da partida só iniciam ao chamar
+`CommunicationThreads.run()`; preparar o coordenador não inicia comunicação.
 
 O processamento local implementado segue este caminho:
 
@@ -163,11 +219,13 @@ executar um exemplo que imprime diretamente uma caixa de saída e o resultado.
 
 ## Onde é necessária implementação manual
 
-Quatro pontos executáveis atualmente levantam `NotImplementedError`:
+Os seguintes pontos executáveis levantam `NotImplementedError`:
 
 | Ponto de entrada | Trabalho a implementar |
 | --- | --- |
 | `NetworkServer.run()` em [network.py](src/tetris_server/network.py) | Listener TCP, laço sequencial de eventos com I/O não bloqueante, reserva de duas conexões, associação confiável de sessões, buffers de entrada e saída, escritas parciais, detecção de falhas, temporizadores, escoamento final e fechamento dos sockets. |
+| `NetworkServer.receive_command(stop)` | Recebimento TCP, validação, associação de sessão e parada cooperativa da thread. |
+| `NetworkServer.send_event(event)` | Integração do encoder, buffers e escritas TCP parciais na thread de envio. |
 | `encode(event)` em [protocol.py](src/tetris_shared/protocol.py) | Serializar eventos de saída em linhas ASCII TVP/1 terminadas por LF. Converter BOARD em exatamente 200 dígitos. |
 | `decode(frame)` em [protocol.py](src/tetris_shared/protocol.py) | Validar a gramática e os campos exatos e traduzir entradas aceitas do cliente em comandos locais. O adaptador deve associar a sessão real do remetente e validar direção e estado. |
 | `StreamParser.feed(data)` em [protocol.py](src/tetris_shared/protocol.py) | Manter um buffer por conexão, extrair todas as mensagens completas delimitadas por LF, guardar fragmentos e rejeitar entradas grandes demais mesmo antes de chegar LF. |

@@ -1,5 +1,15 @@
 # Boilerplate do servidor - partida única
 
+## Estado atual e extensão posterior ao boilerplate
+
+A implementação local atende o domínio e prepara threads de comunicação.
+A thread chamadora despacha comandos sequencialmente; uma thread recebe
+comandos por callback e outra envia eventos por callback. A comunicação TCP
+da partida continua pendente. O modo `network-test` é um diagnóstico separado,
+com TCP mínimo em loopback, autorizado posteriormente: não usa TVP/1 nem
+implementa jogadores ou políticas da partida. As instruções abaixo de manter
+sockets pendentes continuam aplicadas ao transporte do jogo e às simulações.
+
 ## 1. Instrução para gerar o código
 
 Ler junto de `00-contexto-geral.md`. Criar o domínio de um servidor Python para **exatamente dois jogadores em uma única partida por execução**. Implementar o ciclo local em memória e os testes. Deixar comunicação real em `TODO[EP-REDE]` com `NotImplementedError`.
@@ -12,11 +22,13 @@ O servidor é autoridade do início e do resultado, mas não roda a física e n�
 
 | Arquivo | Responsabilidade |
 | --- | --- |
-| `src/tetris_server/__main__.py` | Modo simulated ou network pendente. |
+| `src/tetris_server/__main__.py` | Modos simulated, network pendente e network-test de diagnóstico TCP. |
 | `src/tetris_server/match.py` | Dois participantes, prontidão, estado e resultado único. |
 | `src/tetris_server/app.py` | Processar comandos locais sequencialmente e registrar saídas. |
 | `src/tetris_server/simulation.py` | Cenários com participantes e conexões fictícias. |
-| `src/tetris_server/network.py` | Stub de listener, duas conexões, I/O e timers. |
+| `src/tetris_server/network.py` | Stubs de listener, recebimento e envio TCP; monta o coordenador de threads. |
+| `src/tetris_server/communication.py` | Threads de recebimento e envio por callbacks, filas e dispatcher na thread chamadora. |
+| `src/tetris_server/network_diagnostic.py` | Diagnóstico TCP local separado, com uma thread de envio e outra de recebimento. |
 | `src/tetris_shared/models.py` | Tipos internos compartilhados. |
 | `src/tetris_shared/rules.py` | Quantidades permitidas e constantes. |
 | `src/tetris_shared/protocol.py` | Stubs do codec/parser/framing. |
@@ -114,12 +126,18 @@ Cenários mínimos:
 Comandos esperados após geração:
 
 ```bash
-python -m tetris_server --mode simulated
-python -m tetris_server --mode network
-python -m unittest discover -s tests
+PYTHONPATH=src python -m tetris_server --mode simulated
+PYTHONPATH=src python -m tetris_server --mode network
+PYTHONPATH=src python -m tetris_server --mode network-test --port 5000
+PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
 O modo network ainda falha explicitamente com `TODO[EP-REDE]`. Logs locais mostram estado, participante, ocorrência e motivo, sem fingir bytes, ping ou conexões reais.
+
+O diagnóstico abre `127.0.0.1:5000` por padrão; `--port 0` escolhe uma porta
+livre. Envia três blocos e confere o fluxo de 54 bytes, preservando leituras
+parciais. Termina após a verificação; erros retornam 2. Não representa uma partida
+TCP funcional. Os testes de integração são ignorados se sockets forem proibidos.
 
 ## 7. Aceite
 

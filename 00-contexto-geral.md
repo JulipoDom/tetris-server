@@ -1,6 +1,24 @@
 # Tetris Versus - contexto geral simplificado
 
-Revisão: 04/10/2026. Uso interno da equipe.
+Revisão: 05/10/2026. Uso interno da equipe.
+
+## Estado atual da implementação do servidor
+
+O servidor agora prepara duas threads de comunicação por callbacks: recebimento
+e envio. A thread chamadora continua sendo o dispatcher sequencial e a única
+que modifica a partida. `NetworkServer.prepare_communication()` apenas monta
+essa estrutura; `CommunicationThreads.run()` inicia as threads.
+
+A comunicação TCP da partida, o codec, framing, buffers de bytes e temporizadores
+seguem pendentes com `TODO[EP-REDE]`. O modo `network` falha com código 2.
+Por solicitação posterior ao boilerplate, existe um modo separado `network-test`
+que abre TCP somente em `127.0.0.1`, conecta um cliente local, envia três blocos
+predefinidos e verifica 54 bytes. Ele não usa TVP/1 nem inicia partida. Essa é uma
+exceção restrita à ferramenta de diagnóstico às instruções originais de não
+abrir sockets no boilerplate; não altera a gramática ou as regras do jogo.
+
+Consulte [IMPLEMENTS.md](IMPLEMENTS.md) para os pontos de implementação e
+[README.md](README.md) para execução e limites da validação.
 
 ## 1. Decisões que valem para todo o projeto
 

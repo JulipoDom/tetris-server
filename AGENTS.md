@@ -1,5 +1,11 @@
 # Tetris server: repository guidance
 
+## Repository remote
+
+- GitHub repository: `JulipoDom/tetris-server`.
+- SSH remote: `git@github.com:JulipoDom/tetris-server.git`; remote name: `origin`.
+- Default branch: `main`. Preserve existing remote history when publishing changes.
+
 ## Read first
 
 - Read `00-contexto-geral.md` and `02-boilerplate-servidor.md` before changing the server.
@@ -15,6 +21,7 @@
 - Implement the domain, sequential application dispatcher, in-memory simulations, and their tests.
 - Real networking, codecs, parsing, framing, buffers, and timers remain `TODO[EP-REDE]`. Executable unimplemented methods must raise `NotImplementedError` with that marker.
 - Network mode must fail explicitly; never fall back to simulation.
+- A later user request authorized `network-test`: minimal TCP diagnostics on `127.0.0.1`, separate from the match transport and TVP/1. It sends three predefined blocks, checks the 54-byte stream, and exits. This narrowly scoped diagnostic is the exception to the pending-network rule; do not extend it into game transport.
 - The server must not import the client engine or `curses`. Keep shared models and rules independent of networking and UI.
 - Future transport uses direct TCP sockets. Do not replace it with HTTP, WebSocket, RPC, or a multiplayer framework.
 
@@ -26,7 +33,9 @@
 | `src/tetris_server/match.py` | `MatchController`, two participants, readiness, state, immutable result. |
 | `src/tetris_server/app.py` | Sequential dispatch of local commands and recorded outputs. |
 | `src/tetris_server/simulation.py` | Scenarios using objects, callbacks, and per-participant outboxes in memory. |
-| `src/tetris_server/network.py` | Pending listener, connection admission, I/O, association, and timers. |
+| `src/tetris_server/network.py` | Pending listener, connection admission, I/O, association, and timers; prepares communication workers. |
+| `src/tetris_server/communication.py` | Receive/send callback threads and object queues; caller thread dispatches commands sequentially. |
+| `src/tetris_server/network_diagnostic.py` | Standalone minimal TCP loopback diagnostics, with receive/send threads. |
 | `src/tetris_shared/models.py` | Shared internal typed models. |
 | `src/tetris_shared/rules.py` | Allowed attack quantities and common constants. |
 | `src/tetris_shared/protocol.py` | Pending encoder, parser, and framing. |
@@ -37,6 +46,7 @@ Keep a single `tetris_shared` package for eventual use by both executables. Main
 ## Domain invariants
 
 - Use states `WAITING`, `PREPARING`, `PLAYING`, and `FINISHED`. Only the sequential dispatcher changes match state or result.
+- Communication workers must never mutate the match: only the calling dispatcher processes commands and delivery failures. Callbacks must terminate cooperatively; receive observes the stop Event.
 - A participant has an opaque session reference and a nickname. The session identifies the participant; equal nicknames are valid. Derive the opponent from the other position, never from a client-supplied target.
 - Nicknames contain 1–20 characters from `[A-Za-z0-9_]`. A registered session cannot identify itself again. Unknown sessions cannot perform participant operations.
 - One identified player remains in `WAITING`. Two identifications enter `PREPARING` and emit the opponent nickname to each participant.
@@ -79,6 +89,7 @@ Run from the repository root without installing:
 ```bash
 PYTHONPATH=src python -m tetris_server --mode simulated
 PYTHONPATH=src python -m tetris_server --mode network
+PYTHONPATH=src python -m tetris_server --mode network-test --port 0
 PYTHONPATH=src python -m unittest discover -s tests -v
 ```
 
@@ -87,3 +98,5 @@ Simulation must run without sockets or TUI. Network mode must explicitly fail wi
 Cover the complete lifecycle, third-player refusal, duplicate readiness, both KO orders, departures before and after play, timeout/protocol/server-stop policies, invalid boards and attacks (including booleans), unknown sessions, immutable snapshots, and delivery failure after finalization. Confirm start outputs precede game effects and late events preserve the final result.
 
 Logs describe local state, participant, occurrence, and reason. Do not describe simulations as transmitted bytes, measured ping, real connections, or evidence of a functional TCP server.
+
+The diagnostic mode requires local sockets. Its four integration tests explicitly skip when the environment denies sockets; report those skips without claiming real TCP validation. Keep comments and docstrings in Portuguese.
