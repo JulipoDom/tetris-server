@@ -1,0 +1,6 @@
+#!/bin/sh
+# Inicia o servidor na rede usando a porta padrão do módulo.
+set -eu
+cd -- "$(dirname -- "$0")"
+export PYTHONPATH="$PWD/src"
+exec python3 -m tetris_server --mode network --host 0.0.0.0 "$@"

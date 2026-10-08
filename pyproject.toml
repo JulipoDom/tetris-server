@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tetris-versus-server"
 version = "0.1.0"
-description = "Local single-match Tetris Versus server boilerplate"
+description = "Servidor TCP de Tetris Versus para duas pessoas e rodadas sequenciais"
 requires-python = ">=3.12"
 dependencies = []
 

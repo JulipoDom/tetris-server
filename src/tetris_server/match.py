@@ -53,7 +53,7 @@ class MatchController:
         try:
             hash(session)
         except TypeError as error:
-            raise DomainError("Session must be hashable") from error
+            raise DomainError("Sessão deve permitir identificação por chave") from error
 
     def _index(self, session) -> int:
         """Localiza a posição registrada; rejeita sessões de participantes desconhecidas."""
@@ -61,24 +61,32 @@ class MatchController:
         for index, player in enumerate(self._players):
             if player is not None and player.session == session:
                 return index
-        raise DomainError("Unknown participant session")
+        raise DomainError("Sessão de participante desconhecida")
 
     def _require_playing(self):
         """Impede efeitos de jogo antes do início autorizado para ambos os jogadores."""
         if self.state != MatchState.PLAYING:
-            raise DomainError("Operation requires an active match")
+            raise DomainError("Operação exige uma partida ativa")
+
+    def _playing_index(self, session: Hashable) -> int | None:
+        """Valida o participante e ignora efeitos tardios sem reabrir a partida."""
+        index = self._index(session)
+        if self.state == MatchState.FINISHED:
+            return None
+        self._require_playing()
+        return index
 
     def join(self, session: Hashable, nickname: str) -> tuple[OutboundEvent, ...]:
         """Registra um jogador e emite MATCH quando ambas as posições estão ocupadas."""
         self._validate_session(session)
         if self.state == MatchState.FINISHED:
-            raise DomainError("This execution's match is finished")
+            raise DomainError("A partida atual já está encerrada")
         if any(p is not None and p.session == session for p in self._players):
-            raise DomainError("Session is already identified")
+            raise DomainError("Sessão já está identificada")
         if not isinstance(nickname, str) or re.fullmatch(NICKNAME_PATTERN, nickname) is None:
-            raise DomainError("Nickname must contain 1-20 ASCII letters, digits, or underscores")
+            raise DomainError("Apelido deve ter 1 a 20 letras ASCII, números ou underscore")
         if all(p is not None for p in self._players):
-            raise DomainError("The two participant positions are occupied")
+            raise DomainError("As duas posições de jogadores estão ocupadas")
         index = 0 if self.player1 is None else 1
         self._players[index] = Player(session, nickname)
         if self.player2 is None:
@@ -95,7 +103,7 @@ class MatchController:
         if self.state in (MatchState.FINISHED, MatchState.PLAYING):
             return ()
         if self.state != MatchState.PREPARING:
-            raise DomainError("Readiness requires both identified participants")
+            raise DomainError("Prontidão exige os dois participantes identificados")
         self._players[index] = replace(self._players[index], ready=True)
         if not all(player.ready for player in self._players):
             return ()
@@ -104,34 +112,32 @@ class MatchController:
 
     def attack(self, session: Hashable, quantity: int) -> tuple[OutboundEvent, ...]:
         """Valida a quantidade de lixo e a encaminha sem alteração ao oponente."""
-        index = self._index(session)
-        if self.state == MatchState.FINISHED:
+        index = self._playing_index(session)
+        if index is None:
             return ()
-        self._require_playing()
         if type(quantity) is not int or quantity not in ATTACK_QUANTITIES:
-            raise DomainError("Attack quantity must be integer 1, 2, or 4")
+            raise DomainError("Quantidade de ataque deve ser o inteiro 1, 2 ou 4")
         return (OutboundEvent(self._players[1 - index].session, MessageType.ATTACK, quantity),)
 
     @staticmethod
     def _snapshot(cells) -> Snapshot:
         """Valida o tabuleiro 20x10 e copia suas células para linhas imutáveis."""
         if not isinstance(cells, Sequence) or isinstance(cells, (str, bytes)) or len(cells) != BOARD_ROWS:
-            raise DomainError("Board must have 20 rows")
+            raise DomainError("Tabuleiro deve ter 20 linhas")
         rows = []
         for row in cells:
             if not isinstance(row, Sequence) or isinstance(row, (str, bytes)) or len(row) != BOARD_COLUMNS:
-                raise DomainError("Each board row must have 10 cells")
+                raise DomainError("Cada linha do tabuleiro deve ter 10 células")
             if any(type(cell) is not int or not MIN_CELL <= cell <= MAX_CELL for cell in row):
-                raise DomainError("Board cells must be integers from 0 through 8")
+                raise DomainError("Células do tabuleiro devem ser inteiros entre 0 e 8")
             rows.append(tuple(row))
         return tuple(rows)
 
     def board(self, session: Hashable, cells) -> tuple[OutboundEvent, ...]:
         """Armazena o tabuleiro fixo mais recente do remetente e o emite ao oponente."""
-        index = self._index(session)
-        if self.state == MatchState.FINISHED:
+        index = self._playing_index(session)
+        if index is None:
             return ()
-        self._require_playing()
         snapshot = self._snapshot(cells)
         self._players[index] = replace(self._players[index], snapshot=snapshot)
         return (OutboundEvent(self._players[1 - index].session, MessageType.BOARD, snapshot),)
@@ -151,7 +157,7 @@ class MatchController:
         if self.state == MatchState.FINISHED:
             return ()
         if not isinstance(cause, str) or cause not in KO_CAUSES:
-            raise DomainError("KO cause must be SPAWN or OVERFLOW")
+            raise DomainError("Causa de nocaute deve ser SPAWN, OVERFLOW ou INACTIVITY")
         if self.state != MatchState.PLAYING:
             return self.failure(session, EndReason.PROTOCOL)
         opponent = self._players[1 - index].session
@@ -167,9 +173,9 @@ class MatchController:
         try:
             reason = EndReason(reason)
         except (ValueError, TypeError) as error:
-            raise DomainError("Invalid participant failure reason") from error
+            raise DomainError("Motivo de falha do participante inválido") from error
         if reason not in (EndReason.DISCONNECT, EndReason.TIMEOUT, EndReason.PROTOCOL):
-            raise DomainError("Invalid participant failure reason")
+            raise DomainError("Motivo de falha do participante inválido")
         opponent = self._players[1 - index]
         if self.state == MatchState.PLAYING:
             outcomes = ((opponent.session, Outcome.WIN), (session, Outcome.LOSE))

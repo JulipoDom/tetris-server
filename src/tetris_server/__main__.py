@@ -1,6 +1,8 @@
-"""Ponto de entrada do servidor local; o modo de rede real permanece pendente."""
+"""Ponto de entrada dos modos de simulação, diagnóstico e servidor TCP."""
 
 import argparse
+from ipaddress import IPv4Address
+import subprocess
 import sys
 
 from .network import NetworkServer
@@ -8,12 +10,49 @@ from .network_diagnostic import run_network_test
 from .simulation import run_simulations
 
 
+def announce_listening(host: str, port: int) -> None:
+    """Mostra a escuta aberta e os IPs IPv4 que os clientes podem informar."""
+    print(f'Servidor TCP iniciado em {host}:{port}', flush=True)
+    if host != '0.0.0.0':
+        return
+    addresses = set()
+    # Algumas versões de hostname não possuem -I; ip lista as interfaces locais.
+    commands = (['hostname', '-I'], ['ip', '-4', '-o', 'addr', 'show', 'up'])
+    for command in commands:
+        try:
+            output = subprocess.check_output(command, text=True, timeout=1,
+                                             stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        tokens = output.split()
+        if command[0] == 'ip':
+            # Apenas o endereço depois de inet interessa; brd é o broadcast.
+            tokens = [tokens[i + 1].split('/')[0] for i, token in enumerate(tokens[:-1])
+                      if token == 'inet']
+        for token in tokens:
+            try:
+                address = IPv4Address(token)
+            except ValueError:
+                continue
+            if not address.is_loopback and not address.is_unspecified:
+                addresses.add(str(address))
+        if addresses:
+            break
+    for address in sorted(addresses):
+        print(f'  IP para os clientes: {address}:{port}', flush=True)
+    print(f'  Nesta máquina: 127.0.0.1:{port}', flush=True)
+    if not addresses:
+        print('  IP da rede não detectado; consulte hostname -I ou ip -4 addr.', flush=True)
+    print('Ctrl+C para encerrar o servidor.', flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
-    """Executa cenários locais ou informa que a rede real continua pendente."""
-    parser = argparse.ArgumentParser(description='Tetris Versus single-match server boilerplate')
+    """Executa cenários locais ou atende partidas sequenciais na rede."""
+    parser = argparse.ArgumentParser(description='Servidor Tetris Versus')
     parser.add_argument('--mode', choices=('simulated', 'network', 'network-test'), default='simulated')
-    parser.add_argument('--port', type=int, default=5000,
-                        help='Porta TCP do diagnóstico local; 0 escolhe uma porta livre')
+    parser.add_argument('--host', default='127.0.0.1', help='Endereço da escuta TCP no modo network')
+    parser.add_argument('--port', type=int, default=8765,
+                        help='Porta TCP; 0 escolhe uma porta livre')
     args = parser.parse_args(argv)
     if args.mode == 'network-test':
         try:
@@ -28,9 +67,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.mode == 'network':
         try:
-            NetworkServer().run()
-        except NotImplementedError as error:
-            print(str(error), file=sys.stderr)
+            NetworkServer(host=args.host, port=args.port).run(on_listening=announce_listening)
+        except (OSError, ValueError) as error:
+            print(f'Falha ao iniciar servidor TCP: {error}', file=sys.stderr)
             return 2
         return 0
     for report in run_simulations():

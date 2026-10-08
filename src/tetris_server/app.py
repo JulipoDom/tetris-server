@@ -3,6 +3,7 @@
 As funções de retorno consomem objetos Python. Este módulo não realiza E/S de rede.
 """
 
+from collections import deque
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass
 
@@ -23,23 +24,13 @@ class ServerApp:
         """Prepara um controlador, filas de saída por sessão e registros locais."""
         self.controller = controller if controller is not None else MatchController()
         self.outboxes: dict[Hashable, list[OutboundEvent]] = {}
-        self.logs: list[LocalRecord] = []
+        # Registros antigos cedem lugar aos recentes sem limitar efeitos da partida.
+        self.logs: deque[LocalRecord] = deque(maxlen=1024)
 
     def process(self, command: Command) -> tuple[OutboundEvent, ...]:
         """Processa um fato por completo antes de receber o próximo."""
-        operations = {
-            'join': lambda: self.controller.join(command.session, command.payload),
-            'ready': lambda: self.controller.ready(command.session),
-            'attack': lambda: self.controller.attack(command.session, command.payload),
-            'board': lambda: self.controller.board(command.session, command.payload),
-            'ko': lambda: self.controller.ko(command.session, command.payload),
-            'failure': lambda: self.controller.failure(command.session, command.payload),
-            'stop': self.controller.stop,
-        }
-        if command.operation not in operations:
-            raise ValueError(f'Unknown local operation: {command.operation}')
         try:
-            events = operations[command.operation]()
+            events = self._dispatch(command)
         except DomainError as error:
             self.logs.append(LocalRecord(self.controller.state, command.session,
                                          'rejected', str(error)))
@@ -51,6 +42,26 @@ class ServerApp:
                                      command.operation, reason))
         self._enqueue(events)
         return events
+
+    def _dispatch(self, command: Command) -> tuple[OutboundEvent, ...]:
+        """Escolhe a operação sem esconder seus argumentos em funções anônimas."""
+        operations = {
+            'join': self.controller.join,
+            'ready': self.controller.ready,
+            'attack': self.controller.attack,
+            'board': self.controller.board,
+            'ko': self.controller.ko,
+            'failure': self.controller.failure,
+            'stop': self.controller.stop,
+        }
+        operation = operations.get(command.operation)
+        if operation is None:
+            raise ValueError(f'Operação local desconhecida: {command.operation}')
+        if command.operation == 'stop':
+            return operation()
+        if command.operation == 'ready':
+            return operation(command.session)
+        return operation(command.session, command.payload)
 
     def _enqueue(self, events: tuple[OutboundEvent, ...]) -> None:
         """Enfileira efeitos, substituindo apenas cópias antigas de tabuleiro não consumidas."""
